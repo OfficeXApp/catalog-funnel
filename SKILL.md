@@ -1,23 +1,23 @@
 ---
 name: catalog-funnel
 description: |
-  Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B split tests, and track visitor analytics — all through conversation.
+  Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
   Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents.
-  Triggers: catalog funnel, catalog builder, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, split test, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools
+  Triggers: catalog funnel, catalog builder, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools
 ---
 
 # Catalog Funnel
 
-Build and manage marketing catalogs, landing pages, and multi-step funnels — directly through your AI agent. Create catalogs with 56+ component types, publish them to your custom subdomain, run A/B split tests, and monitor conversion analytics in real time.
+Build and manage marketing catalogs, landing pages, and multi-step funnels — directly through your AI agent. Create catalogs with 56+ component types, publish them instantly, run A/B tests with weighted variants, and monitor conversion analytics in real time.
 
 > **Install on OfficeX:** [officex.app/store/en/app/catalog-funnel](https://officex.app/store/en/app/catalog-funnel)
 
 ## What You Can Do
 
 - **Create catalogs** — build lead capture forms, product catalogs, multi-step funnels from a JSON schema
-- **Publish instantly** — catalogs go live at `https://yourname.catalogs.cloud.zoomgtm.com/your-slug`
+- **Publish instantly** — catalogs go live at your custom domain or via user_id path
 - **Check analytics** — see visitors, conversions, page drop-off, field completions, referrer sources, and revenue
-- **Run A/B tests** — split traffic between catalog variants to find what converts best
+- **Run A/B tests** — use weighted variants to split traffic to find what converts best
 - **AI variant routing** — auto-route visitors to the best catalog variant using natural language hints
 - **Sandbox editing** — clone a catalog to safely make changes without affecting the live version, then promote when ready
 - **Element inspector** — hold Shift+Alt to hover-inspect any element and copy its exact `pageId/componentId` reference for AI agents
@@ -98,7 +98,7 @@ POST https://catalog-funnel-api.cloud.zoomgtm.com/api/v1/catalogs
 }
 ```
 
-- `slug` — URL-friendly name (lowercase, hyphens). Your catalog will be live at `https://yourname.catalogs.cloud.zoomgtm.com/spring-sale`
+- `slug` — URL-friendly name (lowercase, hyphens). Your catalog will be live at your configured domain
 - `status` — `"published"` (live) or `"draft"` (hidden). Default: `"published"`
 - `visibility` — `"public"` (listed) or `"unlisted"` (link-only). Default: `"unlisted"`
 
@@ -112,7 +112,7 @@ POST https://catalog-funnel-api.cloud.zoomgtm.com/api/v1/catalogs
     "name": "Spring Sale Landing Page",
     "status": "published",
     "visibility": "public",
-    "url": "https://yourname.catalogs.cloud.zoomgtm.com/spring-sale"
+    "url": "https://catalogs.cloud.zoomgtm.com/USER_ID/spring-sale"
   }
 }
 ```
@@ -265,35 +265,23 @@ Returns every event in chronological order with a summary: total events, first/l
 
 ---
 
-## A/B Split Tests
+## A/B Testing with Weighted Variants
 
-Test different versions of your catalog to find what converts best. Split tests route visitors to different catalog variants based on weighted traffic distribution.
-
-### Create a split test
-
-```
-POST https://catalog-funnel-api.cloud.zoomgtm.com/api/v1/split-tests
-```
+Test different versions of your catalog by adding weighted variants to your schema. Set `variant_routing: "random"` for weighted random routing, `"hint"` for AI-based routing, or `"hybrid"` for both.
 
 ```json
 {
-  "slug": "spring-sale",
-  "name": "Spring Sale A/B Test",
-  "destinations": [
-    { "slug": "spring-sale-v1", "weight": 50, "label": "Control" },
-    { "slug": "spring-sale-v2", "weight": 50, "label": "New headline" }
-  ]
+  "schema": {
+    "variant_routing": "random",
+    "variants": [
+      { "id": "v1", "slug": "control", "weight": 50, "description": "Original" },
+      { "id": "v2", "slug": "new-headline", "weight": 50, "description": "New headline" }
+    ]
+  }
 }
 ```
 
-The `slug` is the URL visitors see. They get routed to one of the destination catalogs based on weights. Visitors are sticky — they always see the same variant on return visits.
-
-### Other split test operations
-
-- `GET /api/v1/split-tests` — List all split tests
-- `GET /api/v1/split-tests/:slug` — Get one split test
-- `PUT /api/v1/split-tests/:slug` — Update (change `name`, `destinations`, or `status`: `"active"` / `"paused"`)
-- `DELETE /api/v1/split-tests/:slug` — Delete a split test
+Variants with `target_slug` route visitors to a different catalog entirely. Variants without `target_slug` apply personalization hints within the same catalog.
 
 ---
 
@@ -493,14 +481,14 @@ Automatically route visitors to the best catalog variant using natural language 
 ### Route a visitor with a hint (GET — query param)
 
 ```
-# Using subdomain:
-GET https://catalog-funnel-api.cloud.zoomgtm.com/public/route-variant?subdomain=yourname&slug=my-catalog&hint="female entrepreneur interested in social media"
+# Using user_id:
+GET https://catalog-funnel-api.cloud.zoomgtm.com/public/route-variant?user_id=USER_ID&slug=my-catalog&hint="female entrepreneur interested in social media"
 
 # Using custom domain instead:
 GET https://catalog-funnel-api.cloud.zoomgtm.com/public/route-variant?domain=funnels.mycompany.com&slug=my-catalog&hint="female entrepreneur interested in social media"
 ```
 
-> **Note:** Use quotes around the hint value for readability — browsers automatically encode `"` to `%22` and spaces to `+`/`%20`. Both `hint`/`hints` and `subdomain`/`domain` are accepted.
+> **Note:** Use quotes around the hint value for readability — browsers automatically encode `"` to `%22` and spaces to `+`/`%20`. Both `hint`/`hints` and `user_id`/`domain` are accepted.
 
 ### Route a visitor with a hint (POST — JSON body)
 
@@ -510,13 +498,13 @@ If URL encoding is a concern, use the POST alternative with a JSON body:
 curl -X POST https://catalog-funnel-api.cloud.zoomgtm.com/public/route-variant \
   -H "Content-Type: application/json" \
   -d '{
-    "subdomain": "yourname",
+    "user_id": "USER_ID",
     "slug": "my-catalog",
     "hint": "female entrepreneur interested in social media"
   }'
 ```
 
-Both `hint`/`hints` and `subdomain`/`domain` are accepted.
+Both `hint`/`hints` and `user_id`/`domain` are accepted.
 
 **Response (same for GET and POST):**
 ```json
@@ -533,20 +521,20 @@ Both `hint`/`hints` and `subdomain`/`domain` are accepted.
 
 ### Frontend hint URLs
 
-The frontend handles AI routing automatically — just add `hint` to the URL. Works on both subdomain URLs and custom domains:
+The frontend handles AI routing automatically — just add `hint` to the URL. Works with path-based URLs and custom domains:
 
 ```
-# Subdomain URL:
-https://yourname.catalogs.cloud.zoomgtm.com/my-catalog?hint="female entrepreneur"&ref=253
+# Path-based URL:
+https://catalogs.cloud.zoomgtm.com/USER_ID/my-catalog?hint="female entrepreneur"&ref=253
 
 # Custom domain URL (works the same way):
 https://funnels.mycompany.com/my-catalog?hint="female entrepreneur"&ref=253
 
 # Silent redirect (for affiliates — suppresses event tracking):
-https://yourname.catalogs.cloud.zoomgtm.com/my-catalog?hint="problem aware male"&silent_redirect=true&ref=253
+https://catalogs.cloud.zoomgtm.com/USER_ID/my-catalog?hint="problem aware male"&silent_redirect=true&ref=253
 
 # After AI routing resolves, browser URL updates to:
-https://yourname.catalogs.cloud.zoomgtm.com/my-catalog/problem-aware-male?ref=253
+https://catalogs.cloud.zoomgtm.com/USER_ID/my-catalog/problem-aware-male?ref=253
 ```
 
 The base catalog renders instantly while AI routing resolves in the background. Visitors never see a loading screen — the variant swap is seamless.
@@ -579,7 +567,7 @@ POST https://catalog-funnel-api.cloud.zoomgtm.com/api/v1/catalogs/:id/sandbox
     "name": "Spring Sale Landing Page (Sandbox: redesign-v2)",
     "sandbox_of": "01HXY...",
     "parent_slug": "spring-sale",
-    "url": "https://yourname.catalogs.cloud.zoomgtm.com/spring-sale--redesign-v2"
+    "url": "https://catalogs.cloud.zoomgtm.com/USER_ID/spring-sale--redesign-v2"
   }
 }
 ```
