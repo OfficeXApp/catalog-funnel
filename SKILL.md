@@ -135,33 +135,136 @@ Fetch a published catalog schema. Resolution order: direct catalog → active sp
 
 ### Analytics
 
-Require authentication with `analytics:read` permission.
+All analytics endpoints require authentication with `analytics:read` permission. Each call costs **1 credit**. Event ingestion is FREE.
+
+Events are stored in a dedicated analytics DynamoDB table with 180-day TTL. Daily and hourly rollup counters are atomically incremented for fast timeseries queries.
 
 #### GET /api/v1/analytics/catalogs/:id
 
-Funnel metrics: unique visitors, conversions, page drop-off, field completions, variant breakdown, referrer sources.
+Aggregate funnel metrics: unique visitors, conversions, page drop-off, field completions, variant breakdown, referrer sources, checkout stats, revenue.
 
-**Query params:** `start`, `end` (ISO dates), `limit`
+**Query params:** `start`, `end` (ISO dates)
 
 #### GET /api/v1/analytics/catalogs/:id/events
 
-Raw events for a catalog.
+Raw events with filters and cursor pagination.
+
+**Query params:** `start`, `end`, `cursor`, `limit` (default 100, max 500), `event_type`, `page_id`, `component_id`, `variant_slug`, `utm_source`, `utm_medium`, `utm_campaign`, `referrer`
+
+**Response includes** `cursor` for next page (null when done).
+
+#### GET /api/v1/analytics/catalogs/:id/timeseries
+
+Rollup data as a timeseries array — fast reads from pre-computed counters.
+
+**Query params (required):** `start`, `end` (ISO dates), `interval` (`day` or `hour`)
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": [
+    { "date": "2024-01-01", "page_views": 150, "sessions": 80, "form_submits": 25, "checkout_completes": 5, "revenue_cents": 4900, ... }
+  ]
+}
+```
+
+#### GET /api/v1/analytics/catalogs/:id/dropoff
+
+Page and field drop-off analysis.
+
+**Query params:** `start`, `end` (ISO dates)
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "total_visitors": 500,
+    "pages": [
+      { "page_id": "intro", "visitors": 500, "drop_off_rate": 0 },
+      { "page_id": "questions", "visitors": 350, "drop_off_rate": 30 }
+    ],
+    "fields": [
+      { "field_id": "questions/email", "completions": 300, "completion_rate": 85.7 }
+    ]
+  }
+}
+```
+
+#### GET /api/v1/analytics/catalogs/:id/responses
+
+Answer breakdowns per component — shows distribution of responses.
+
+**Query params:** `start`, `end`, `page_id`, `component_id` (all optional)
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "components": {
+      "questions/q1": {
+        "total_responses": 200,
+        "distribution": {
+          "Call To Action": { "count": 112, "percent": 56 },
+          "Click To Act": { "count": 28, "percent": 14 },
+          "Create The Ad": { "count": 60, "percent": 30 }
+        }
+      }
+    }
+  }
+}
+```
 
 #### GET /api/v1/analytics/tracers/:tracerId
 
-Full visitor journey for a tracer ID.
+Full visitor journey — every event for a single visitor in chronological order.
+
+**Response includes** summary: total events, first/last seen, pages viewed, submitted status.
 
 ---
 
-### Event Tracking (No Auth)
+### Schema Introspection
+
+#### GET /api/v1/catalogs/:id/schema/ids
+
+Flat JSON map of all page and component IDs with labels and types. Useful for building analytics queries programmatically.
+
+**Response:**
+```json
+{
+  "pages": {
+    "questions": { "title": "Marketing Knowledge", "index": 0 },
+    "results": { "title": "Your Results", "index": 1 }
+  },
+  "components": {
+    "questions/q1": { "type": "multiple_choice", "label": "What does CTA stand for?", "quiz": true },
+    "questions/email": { "type": "email", "label": "Your Email", "required": true }
+  },
+  "routing_entry": "questions"
+}
+```
+
+---
+
+### Event Tracking (No Auth — FREE)
 
 #### POST /events
 
-Track a single event. Valid types: `page_view`, `field_change`, `field_complete`, `form_submit`, `action_click`, `exit_intent`, `session_start`, `session_resume`, `cart_add`, `cart_remove`, `checkout_start`, `checkout_skip`, `video_play`, `video_pause`, `video_progress`, `video_complete`, `video_chapter`, `video_seek`
+Track a single event. Valid types: `page_view`, `field_change`, `field_complete`, `form_submit`, `action_click`, `exit_intent`, `session_start`, `session_resume`, `cart_add`, `cart_remove`, `checkout_start`, `checkout_skip`, `checkout_complete`, `payment_info_added`, `offer_declined`, `lead_captured`, `video_play`, `video_pause`, `video_progress`, `video_complete`, `video_chapter`, `video_seek`
 
 #### POST /events/batch
 
 Track up to 25 events at once.
+
+### Variant Analytics
+
+Every catalog gets an automatic `catalog:{catalog_id}` tag. To group variant catalogs for cross-variant analytics, add the base catalog's `catalog:{base_id}` tag to each variant's `schema.tags`. API keys scoped with matching `tag_patterns` can query analytics across all tagged variants.
+
+### Webhooks
+
+All event types are forwarded to the catalog's `webhook_url` (if configured). Payload includes `event_id` (ULID) for deduplication and `schema_ref` with human-readable page/component context.
 
 ---
 
