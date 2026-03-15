@@ -20,7 +20,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Run A/B tests** — use weighted variants to split traffic to find what converts best
 - **AI variant routing** — auto-route visitors to the best catalog variant using natural language hints
 - **Sandbox editing** — clone a catalog to safely make changes without affecting the live version, then promote when ready
-- **Element inspector** — hold Shift+Alt to hover-inspect any element and copy its exact `pageId/componentId` reference for AI agents
+- **Element inspector** — hold Shift+Alt to hover-inspect any element (including the top navbar) and copy its exact `pageId/componentId` reference for AI agents
 - **View visitor journeys** — trace exactly what each visitor did step by step
 - **Manage access** — create API keys for team members or integrations
 - **Upload videos** — add video content with automatic HLS transcoding
@@ -471,6 +471,12 @@ Input components support a `prefill_mode` property that controls how prefilled v
 ```
 
 To prefill values, pass them as URL parameters matching the component ID: `?referral_code=ABC123`. The readonly input renders with a clipboard icon — clicking it copies the value and shows a brief checkmark confirmation.
+
+### Auto-Skip Pages
+
+Set `auto_skip: true` on a page to automatically skip it when all visible input fields already have values (from URL params, defaults, or prior entry). Useful for funnels where prefill makes a page redundant — the visitor jumps straight to the next step. Only skips if the page has at least one visible input and all of them have values. Display-only pages are never auto-skipped. Runs after `on_enter` hooks. Skipped pages do NOT appear in browser history. A `page_auto_skipped` event is tracked.
+
+**Chaining catalogs:** Use `settings.completion.redirect_url` with `{{field_id}}` templates (e.g. `"https://sub.catalogkit.cc/next?email={{comp_email}}"`) to pass form data to the next catalog. The receiving catalog maps URL params to component IDs via `settings.url_params.prefill_mappings` and sets `auto_skip: true` on pages that should be skipped when pre-filled.
 
 ### Component Width (Multi-Column Layout)
 
