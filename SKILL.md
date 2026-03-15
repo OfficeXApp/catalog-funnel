@@ -2,8 +2,8 @@
 name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
-  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state, (12) Uploading and compressing images for fast loading.
-  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit, image upload, image compression, webp
+  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety and real function hooks.
+  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit, image upload, image compression, webp, typescript, ts config, on_init, on_tick, globals, timers, global state
 ---
 
 # Catalog Kit
@@ -26,6 +26,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Upload videos** — add video content with automatic HLS transcoding
 - **Upload images** — upload images with automatic WebP compression and thumbnail generation (free)
 - **Scripting hooks** — add imperative logic (API calls, dynamic routing, cross-page state) at page and component lifecycle points
+- **TypeScript-as-config** — author catalogs as .ts files with full type safety and real function hooks, then push via CLI
 
 ## Getting Started
 
@@ -650,8 +651,14 @@ Each hook receives a `ScriptContext` with:
 - Read-only: `formState`, `vars`, `hints`, `url_params`, `page_id`, `quiz_scores`, `field_id`/`field_value`/`prev_value` (on_change only)
 - Mutation methods: `setField(id, value)`, `setVar(key, value)`, `setComponentProp(id, prop, value)`, `setNextPage(pageId)`
 - `fetch` for async API calls
+- Timers: `setTimeout(fn, ms)`, `setInterval(fn, ms)`, `clearTimeout(id)`, `clearInterval(id)` — auto-cleaned on page transition
+- Popup control: `showPopup(popupId)`, `dismissPopup(popupId)`
+- Global state: `globals`, `setGlobal(key, value)` — persists across pages for entire catalog session
+- Cross-page reads: `getField(componentId)`, `getAllFields()`, `getParam(key)`, `getAllParams()`
 
 `on_before_next` and `on_submit` can return `{ prevent: true }` to block navigation or `{ next_page: "page_id" }` to override routing. Scripts have a 5-second timeout and never crash the renderer.
+
+**Catalog-level hooks** (`global_hooks`): `on_page_enter`, `on_page_exit`, `on_field_change`, `on_init` (runs once on load), `on_tick` (runs on interval).
 
 ```json
 {
@@ -669,7 +676,8 @@ Each hook receives a `ScriptContext` with:
 Manage catalogs from the command line:
 
 ```bash
-npx catalogs catalog push schema.json --publish    # Create or update a catalog from a JSON file
+npx catalogs catalog push schema.json --publish    # Push a JSON catalog
+npx catalogs catalog push catalog.ts --publish     # Push a TypeScript catalog (functions auto-serialized)
 npx catalogs catalog list                           # List all your catalogs
 npx catalogs video upload ./intro.mp4               # Upload a video
 npx catalogs video status VIDEO_ID                  # Check transcoding progress
