@@ -2,8 +2,8 @@
 name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
-  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents.
-  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools
+  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state.
+  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit
 ---
 
 # Catalog Kit
@@ -24,6 +24,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **View visitor journeys** — trace exactly what each visitor did step by step
 - **Manage access** — create API keys for team members or integrations
 - **Upload videos** — add video content with automatic HLS transcoding
+- **Scripting hooks** — add imperative logic (API calls, dynamic routing, cross-page state) at page and component lifecycle points
 
 ## Getting Started
 
@@ -374,6 +375,25 @@ A catalog schema defines your entire funnel as JSON. Here's a minimal lead captu
 
 **Page features:** `payment`, `captcha`
 
+### Component Width (Multi-Column Layout)
+
+Any component can have a `width` property to create side-by-side layouts. Adjacent sub-full-width components are automatically grouped into flex rows.
+
+**Values:** `"full"` (default), `"half"`, `"third"`, `"two_thirds"`
+
+```json
+{
+  "components": [
+    { "id": "phone_img", "type": "image", "width": "half", "props": { "src": "https://example.com/phone.png" } },
+    { "id": "phone_text", "type": "paragraph", "width": "half", "props": { "text": "**Your Phone**\n\nThis gig is 100% mobile-friendly." } },
+    { "id": "leads_img", "type": "image", "width": "half", "props": { "src": "https://example.com/leads.png" } },
+    { "id": "leads_text", "type": "paragraph", "width": "half", "props": { "text": "**Leads Vending Machine**\n\nGet your daily prospects." } }
+  ]
+}
+```
+
+Components stack vertically on mobile and go side-by-side on desktop. Mix widths freely — e.g. `"third"` + `"two_thirds"` for a sidebar layout.
+
 ### Multi-Page Routing
 
 Route visitors through different pages based on their answers:
@@ -414,6 +434,38 @@ Add quiz scoring to any multiple choice or input component:
 ```
 
 Score-based routing: `{ "score": "percent", "operator": "greater_than", "value": 80 }`
+
+### Inline Quiz Feedback
+
+Show correct/incorrect feedback immediately when a visitor selects an answer (like Fillout.com) by adding `reveal_on_select: true` to the quiz config:
+
+```json
+{
+  "id": "q1",
+  "type": "multiple_choice",
+  "label": "What's the catch?",
+  "options": [
+    { "value": "a", "label": "No Babysitting Policy" },
+    { "value": "b", "label": "Must show up consistently" },
+    { "value": "c", "label": "All of the Above" }
+  ],
+  "quiz": {
+    "correct_answer": "c",
+    "points": 10,
+    "explanation": "All three are true — this program rewards effort.",
+    "reveal_on_select": true
+  }
+}
+```
+
+When `reveal_on_select` is `true`:
+- The correct answer gets a **green border** immediately after selection
+- A wrong selection gets a **red border**
+- A feedback banner shows "Correct!" or "You got the wrong answer."
+- The explanation text is displayed (if provided)
+- Options become **locked** — the visitor cannot change their answer
+
+Works with both `multiple_choice` (single-select) and `checkboxes` (multi-select) components. Omit `reveal_on_select` or set to `false` for the default behavior (no inline feedback — use `reveal_answers` on a later page instead).
 
 ### Popups
 
@@ -458,6 +510,26 @@ Customize what visitors see after submitting:
 ```
 
 **Action types:** `fill_again` (reset form), `share` (copy URL), `redirect` (navigate to URL). All fields are optional — omit `completion` entirely for a minimal checkmark screen.
+
+### Scripting / Hooks
+
+Imperative escape hatches within the declarative config. Attach hooks to pages (`hooks.on_enter`, `hooks.on_before_next`, `hooks.on_exit`, `hooks.on_submit`) or components (`hooks.on_change`). Global hooks on the schema: `global_hooks.on_page_enter`, `global_hooks.on_page_exit`, `global_hooks.on_field_change`.
+
+Each hook receives a `ScriptContext` with:
+- Read-only: `formState`, `vars`, `hints`, `url_params`, `page_id`, `quiz_scores`, `field_id`/`field_value`/`prev_value` (on_change only)
+- Mutation methods: `setField(id, value)`, `setVar(key, value)`, `setComponentProp(id, prop, value)`, `setNextPage(pageId)`
+- `fetch` for async API calls
+
+`on_before_next` and `on_submit` can return `{ prevent: true }` to block navigation or `{ next_page: "page_id" }` to override routing. Scripts have a 5-second timeout and never crash the renderer.
+
+```json
+{
+  "hooks": {
+    "on_enter": "ctx.setVar('entered_at', Date.now())",
+    "on_before_next": "if (!ctx.formState.email) return { prevent: true }"
+  }
+}
+```
 
 ---
 
