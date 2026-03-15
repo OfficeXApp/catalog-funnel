@@ -2,8 +2,8 @@
 name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
-  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state.
-  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit
+  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state, (12) Uploading and compressing images for fast loading.
+  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit, image upload, image compression, webp
 ---
 
 # Catalog Kit
@@ -24,6 +24,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **View visitor journeys** — trace exactly what each visitor did step by step
 - **Manage access** — create API keys for team members or integrations
 - **Upload videos** — add video content with automatic HLS transcoding
+- **Upload images** — upload images with automatic WebP compression and thumbnail generation (free)
 - **Scripting hooks** — add imperative logic (API calls, dynamic routing, cross-page state) at page and component lifecycle points
 
 ## Getting Started
@@ -321,6 +322,69 @@ Manage API keys for team members or integrations.
 
 ---
 
+## Images
+
+Upload images with automatic compression to WebP for fast loading. Compression is free and happens automatically via a background Lambda.
+
+### Upload an image
+
+```
+POST https://api.catalogkit.cc/api/v1/images/upload
+```
+
+```json
+{
+  "filename": "hero-banner.png",
+  "content_type": "image/png",
+  "size_bytes": 2500000,
+  "no_compress": false
+}
+```
+
+**Response (201):**
+```json
+{
+  "ok": true,
+  "data": {
+    "image_id": "01ABC...",
+    "upload_url": "https://s3.amazonaws.com/...",
+    "original_url": "https://cdn.../media/images/original/...",
+    "compressed_url": "https://cdn.../media/images/compressed/...webp",
+    "thumbnail_url": "https://cdn.../media/images/compressed/...thumb.webp",
+    "no_compress": false
+  }
+}
+```
+
+Upload the file using the presigned `upload_url` (PUT request with the image body). Compression happens automatically — use `compressed_url` as the `src` in your image components.
+
+### Check compression status
+
+```
+GET https://api.catalogkit.cc/api/v1/images/:imageId/status
+```
+
+### List images
+
+```
+GET https://api.catalogkit.cc/api/v1/images
+```
+
+### Opt-out of compression
+
+Set `"no_compress": true` in the upload request. The original URL is used directly.
+
+### Compression details
+
+- **Output format**: WebP (best compression, universal browser support)
+- **Max size**: 2048px width (aspect ratio preserved, no upscaling)
+- **Thumbnail**: 400px width, quality 70
+- **Supported input**: JPEG, PNG, GIF, WebP, TIFF, BMP, AVIF, HEIC/HEIF
+- **Cost**: Free (no credits charged)
+- **Originals**: Auto-deleted after 30 days (compressed versions persist)
+
+---
+
 ## Videos
 
 Upload video content to use in your catalogs with automatic HLS transcoding:
@@ -446,6 +510,8 @@ Add quiz scoring to any multiple choice or input component:
 }
 ```
 
+Scoring is **case-insensitive** and tolerates type mismatches — `correct_answer: "Call To Action"` matches a user selecting `"call to action"`, and `correct_answer: ["c"]` (single-element array) works the same as `correct_answer: "c"` for single-select inputs.
+
 Score-based routing: `{ "score": "percent", "operator": "greater_than", "value": 80 }`
 
 ### Inline Quiz Feedback (Reveal on Continue)
@@ -480,6 +546,7 @@ When `reveal_on_select` is `true`, the flow is two-step:
    - The explanation text is displayed (if provided)
    - Options become **locked**
    - A banner says "Answers revealed! Review your results above, then click Continue to proceed."
+   - The page **auto-scrolls** to keep the Continue button visible
 3. The visitor clicks **Continue again** to proceed to the next page
 
 Works with both `multiple_choice` (single-select) and `checkboxes` (multi-select) components. Omit `reveal_on_select` or set to `false` for the default behavior (no inline feedback — use `reveal_answers` on a later page instead).
@@ -758,7 +825,7 @@ By default, `GET /api/v1/catalogs` hides sandboxes. Add `?include_sandboxes=true
 
 ## Element Inspector (DevEx)
 
-Built-in developer tool for AI agent workflows. Hold **Shift+Alt** and hover over any element in a live catalog to see its exact reference path (`pageId/componentId`) with a one-click copy button.
+Built-in developer tool for AI agent workflows. Hold **Shift+Alt** and hover over any element in a live catalog to see its exact reference path — then click to copy.
 
 This makes it trivial to tell an AI agent exactly which element to modify — no guessing, no digging through JSON.
 
@@ -768,9 +835,11 @@ The reference format matches the schema introspection endpoint (`GET /api/v1/cat
 
 1. Open any catalog in the browser
 2. Hold **Shift+Alt** — a "Inspector active" indicator appears
-3. Hover over any element — it highlights with an indigo border and shows a tooltip with `pageId/componentId (type)`
-4. Click **Copy** to copy the reference to clipboard
+3. Hover over any element — it highlights with an indigo border and shows a tooltip with the reference path
+4. **Click anywhere** to copy the reference to clipboard (tooltip flashes green "Copied!")
 5. Paste the reference into your AI agent conversation (e.g. "change the heading at `landing/hero-title`")
+
+**Sub-element targeting:** The inspector drills into child elements within components. Hovering a label, button, input, image, heading, or option card shows a more specific reference with a `#` suffix — e.g. `landing/email_field#label`, `landing/cta#button`, `quiz_page/q1#option:b`. Hovering the component wrapper itself gives the base `pageId/componentId` reference.
 
 ---
 
