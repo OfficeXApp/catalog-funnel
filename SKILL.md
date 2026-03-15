@@ -1,16 +1,16 @@
 ---
-name: catalog-funnel
+name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
   Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents.
   Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools
 ---
 
-# Catalog Funnel
+# Catalog Kit
 
 Build and manage marketing catalogs, landing pages, and multi-step funnels — directly through your AI agent. Create catalogs with 56+ component types, publish them instantly, run A/B tests with weighted variants, and monitor conversion analytics in real time.
 
-> **Install on OfficeX:** [officex.app/store/en/app/catalog-funnel](https://officex.app/store/en/app/catalog-funnel)
+> **Install on OfficeX:** [officex.app/store/en/app/catalog-kit](https://officex.app/store/en/app/catalog-kit)
 
 ## What You Can Do
 
@@ -27,7 +27,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 
 ## Getting Started
 
-After installing Catalog Funnel on OfficeX, you receive credentials automatically. You can also sign up at the dashboard and create API keys from Settings.
+After installing Catalog Kit on OfficeX, you receive credentials automatically. You can also sign up at the dashboard and create API keys from Settings.
 
 ```bash
 # Your API key (created from Settings page or received on install)

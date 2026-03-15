@@ -1,16 +1,16 @@
-# catalog-funnel — OfficeX Skill
+# catalog-kit — OfficeX Skill
 
 ## Quick Install
 
 ```bash
-npx skills add OfficeXApp/catalog-funnel
+npx skills add OfficeXApp/catalog-kit
 ```
 
-> Or install on OfficeX: [officex.app/store/en/app/catalog-funnel](https://officex.app/store/en/app/catalog-funnel)
+> Or install on OfficeX: [officex.app/store/en/app/catalog-kit](https://officex.app/store/en/app/catalog-kit)
 
 ## About
 
-This repository contains the skill documentation (SKILL.md) for the **catalog-funnel** app on OfficeX.
+This repository contains the skill documentation (SKILL.md) for the **catalog-kit** app on OfficeX.
 
 ## What is a SKILL.md?
 
