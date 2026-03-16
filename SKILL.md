@@ -2,8 +2,8 @@
 name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
-  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety and real function hooks, (14) Uploading and hosting downloadable files (PDFs, ZIPs, docs) with credit-based billing.
-  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit, image upload, image compression, webp, typescript, ts config, on_init, on_tick, globals, timers, global state, file upload, file download, downloadable, hosted files
+  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety and real function hooks, (14) Uploading and hosting downloadable files (PDFs, ZIPs, docs) with credit-based billing, (15) Building custom interactive UI with the CatalogKit global API bridge (window.CatalogKit) for inline scripts, real-time field access, and multi-form isolation.
+  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit, image upload, image compression, webp, typescript, ts config, on_init, on_tick, globals, timers, global state, file upload, file download, downloadable, hosted files, CatalogKit, window.CatalogKit, global api, inline script, html script, custom ui, api bridge, multi-form
 ---
 
 # Catalog Kit
@@ -576,6 +576,20 @@ Choice components (`multiple_choice`, `checkboxes`, `dropdown`) support an optio
 | `require_all` | `boolean` | `false` | (checkboxes/multiple_choice) Require ALL options to be selected. When combined with `required: true` and `require_all_fields`, the button stays disabled until every option is checked and every nested required input is filled. |
 
 Value is stored as `__other__:<text>`. **Do not set `other_option: true` unless you intentionally want a free-text fallback** — otherwise an unexpected textarea will render.
+
+### Disabled Options
+
+Individual options in `multiple_choice`, `checkboxes`, `dropdown`, and `picture_choice` can be marked as `disabled: true`. Disabled options are visible but not selectable — rendered at 50% opacity with `cursor-not-allowed`. Useful for hinting at future features or "coming soon" tiers.
+
+```json
+{
+  "options": [
+    { "value": "starter", "label": "Starter — Free" },
+    { "value": "pro", "label": "Pro — $29/mo" },
+    { "value": "enterprise", "label": "Enterprise — Coming Soon", "disabled": true }
+  ]
+}
+```
 
 ### Picture Choice Component
 
@@ -1613,6 +1627,98 @@ const catalog = {
 ```
 
 **Important:** The API validates hook syntax at write time. Malformed hooks are rejected with a clear error — they will never silently fail for visitors.
+
+---
+
+## CatalogKit Global API (`window.CatalogKit`)
+
+A live JavaScript bridge exposed on `window.CatalogKit` that gives any plain JavaScript — inline `<script>` tags in `html` components, external scripts, or browser console — full read/write access to the catalog runtime. This is the recommended way to build custom interactive UI beyond what the declarative schema provides.
+
+### Accessing an instance
+
+Each catalog registers under its `catalog_id`. On pages with a single catalog, use the convenience getter:
+
+```javascript
+const kit = window.CatalogKit.get();           // most recently mounted catalog
+const kit = window.CatalogKit.get('cat_abc');   // specific catalog by ID
+const kit = window.CatalogKit['cat_abc'];       // direct access by ID
+```
+
+**Multi-form isolation:** Multiple catalogs on the same page each register independently under their own `catalog_id`. They never bleed state into each other. Use `.get(id)` to target a specific one.
+
+### API Reference
+
+| Method | Description |
+|--------|-------------|
+| **Read state** | |
+| `kit.getField(id)` | Get current value of any form field |
+| `kit.getAllFields()` | Frozen copy of all form values |
+| `kit.getVar(key)` | Get a script variable |
+| `kit.getAllVars()` | Frozen copy of all script variables |
+| `kit.getUrlParam(key)` | Get a URL query parameter |
+| `kit.getAllUrlParams()` | Frozen copy of all URL params |
+| `kit.getPageId()` | Current page ID |
+| `kit.getGlobal(key)` | Get a global (cross-page) value |
+| **Write state** | |
+| `kit.setField(id, value)` | Set a field value — immediately reflects on screen |
+| `kit.setVar(key, value)` | Set a script variable |
+| `kit.setGlobal(key, value)` | Set a global (persists across pages) |
+| **Button control** | |
+| `kit.setButtonLoading(bool)` | Show/hide loading spinner on Continue button |
+| `kit.setButtonDisabled(bool)` | Enable/disable the Continue button |
+| `kit.setValidationError(id, msg)` | Show a custom error on a field (`null` to clear) |
+| **Navigation** | |
+| `kit.goNext()` | Advance to next page (runs validation + hooks) |
+| `kit.goBack()` | Go to previous page |
+| **Component props** | |
+| `kit.setComponentProp(id, prop, value)` | Override any component prop at runtime (e.g. `hidden`, `label`, `options`) |
+| **Events** | |
+| `kit.on(event, callback)` | Subscribe to `'fieldchange'` or `'pagechange'` |
+| `kit.off(event, callback)` | Unsubscribe |
+| **Utilities** | |
+| `kit.fetch` | Alias for `globalThis.fetch` |
+
+### Event payloads
+
+- `fieldchange`: `{ fieldId: string, value: any }` — fires for each field that changed
+- `pagechange`: `{ pageId: string }` — fires after page transition
+
+### Using with `html` components
+
+`html` components support two features that make the bridge practical:
+
+1. **Template interpolation:** `{{field_id}}` in HTML content is replaced with the current field value, reactive on re-render.
+2. **Inline script execution:** `<script>` tags inside `html` content are automatically executed after render, with full access to `window.CatalogKit`.
+
+```json
+{
+  "id": "price_calc",
+  "type": "html",
+  "props": {
+    "content": "<div id=\"price\">$0</div>\n<script>\nconst kit = window.CatalogKit.get();\nfunction update() {\n  const qty = Number(kit.getField('quantity')) || 0;\n  const tier = kit.getField('tier') || 'basic';\n  const rate = tier === 'pro' ? 49 : 29;\n  document.getElementById('price').textContent = '$' + (qty * rate);\n}\nupdate();\nkit.on('fieldchange', update);\n</script>"
+  }
+}
+```
+
+### Best practices
+
+- **Always use `window.CatalogKit.get()`** — not a raw global. This is future-proof and works in multi-form pages.
+- **Clean up listeners** when appropriate — use `kit.off()` if your script runs on multiple page renders.
+- **Use `setButtonLoading(true)`** before async operations (API calls, validation) and `setButtonLoading(false)` after.
+- **Prefer `setValidationError`** over custom error DOM — it integrates with the native validation system and auto-scrolls.
+- **Use `setComponentProp(id, 'hidden', true/false)`** for conditional UI — it respects the existing visibility system.
+- Scripts execute in a try/catch — errors are logged to console but never crash the catalog renderer.
+
+### Hooks vs CatalogKit API — when to use which
+
+| Scenario | Use |
+|----------|-----|
+| React to field changes, set vars, conditional routing | **Hooks** (`on_change`, `on_before_next`) |
+| Custom interactive UI (calculators, charts, widgets) | **CatalogKit API** in `html` component |
+| Async validation with custom loading UI | **CatalogKit API** |
+| Simple display of field values | **Template interpolation** (`{{field_id}}`) |
+| One-time setup on page load | **Hooks** (`on_enter`) or CatalogKit API |
+| Cross-catalog orchestration from parent page | **CatalogKit API** with `get(catalog_id)` |
 
 ---
 
