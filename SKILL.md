@@ -560,10 +560,11 @@ Page action buttons (and the default submit/continue button) support `side_state
 | `reassurance` | string | Small muted text shown below the button |
 | `submit_side_statement` | string | Same as `side_statement` but for the default submit button (page-level) |
 | `submit_reassurance` | string | Same as `reassurance` but for the default submit button (page-level) |
+| `button_disabled_message` | string | Error message shown when clicking a disabled button (default: "Please fill in all required fields"). Used with `require_all_fields` or script-disabled buttons |
 
 ### Embedded Buttons
 
-Add inline buttons to `multiple_choice`, `checkboxes`, and `timeline` components. Buttons render alongside each option or timeline item — useful for "check the box after opening this link" patterns.
+Add inline buttons to `multiple_choice`, `checkboxes`, `timeline`, and checkout cart items. Buttons render alongside each option or timeline item — useful for "check the box after opening this link" patterns. Cart items support a `button` for side links (e.g. "View Details"). Timeline items also support `side_button` which renders inline with the title (top-right of the card) instead of below the description.
 
 **On choice options** (`multiple_choice` / `checkboxes`):
 
@@ -607,9 +608,26 @@ Add inline buttons to `multiple_choice`, `checkboxes`, and `timeline` components
         "title": "Join Call Center",
         "description": "Get access to the team channel.",
         "button": { "label": "Join Channel", "url": "https://t.me/channel", "style": "outline" },
+        "side_button": { "label": "Preview", "url": "https://t.me/channel/preview", "style": "ghost", "size": "sm" },
         "checkbox": { "label": "Joined" }
       }
     ]
+  }
+}
+```
+
+**On checkout cart items (via page offer):**
+
+Cart items support an optional `button` that renders as a side link next to the price. Useful for "View Details" or "Learn More" links.
+
+```json
+{
+  "offer": {
+    "id": "growth-bundle",
+    "title": "Growth Bundle",
+    "price_display": "$49/mo",
+    "stripe_price_id": "price_...",
+    "button": { "label": "Details", "url": "https://example.com/growth", "style": "secondary", "size": "sm" }
   }
 }
 ```
@@ -726,19 +744,12 @@ When a visitor arrives at Catalog B via `?email=a@b.com&name=John&phone=555`, th
 
 ### Disabled Button Until Required Fields Are Filled
 
-> **Common mistake:** Setting `required: true` on individual fields only adds a visual indicator (asterisk). To actually **disable the submit/continue button** until required fields are filled, you must also set `require_all_fields: true` on the **page**. Both are needed.
-
-Set `require_all_fields: true` on a page to auto-disable the Continue/Submit button until every visible `required` field has a value. The button renders with 50% opacity and `cursor-not-allowed` until all conditions are met.
-
-**Two things are needed:**
-1. `require_all_fields: true` on the **page** — enables the auto-disable behavior
-2. `required: true` on each **field** that must be filled — marks which fields block the button
+The Continue/Submit button is **automatically disabled** whenever any visible `required` field on the current page is empty. Just set `required: true` on individual fields — no page-level flag needed.
 
 ```json
 {
   "contact_info": {
     "title": "Your Details",
-    "require_all_fields": true,
     "components": [
       { "id": "email", "type": "email", "props": { "label": "Email", "required": true } },
       { "id": "name", "type": "short_text", "props": { "label": "Name", "required": true } },
@@ -750,13 +761,15 @@ Set `require_all_fields: true` on a page to auto-disable the Continue/Submit but
 
 In this example, the button stays disabled until both `email` and `name` have values. The optional `newsletter` checkbox doesn't block navigation.
 
+> **Opt-out:** If you want the old click-then-validate behavior (button stays enabled, errors shown on click), set `require_all_fields: false` on the page explicitly.
+
 **How it works:**
 - Only checks visible, non-readonly, non-hidden required fields
 - Respects visibility conditions — if a required field is conditionally hidden, it doesn't block
 - Works with arrays (multiselect, checkboxes) — checks `value.length > 0`
 - Works with both inline buttons and sticky bottom bars
 - Nested inputs from checked checkboxes are included in validation
-- The button is still clickable for screen readers but `disabled` prevents action
+- The button renders with 50% opacity and `cursor-not-allowed` when disabled
 
 #### Script-Controlled Button State
 
@@ -782,11 +795,37 @@ For more complex logic (e.g., async validation, API checks), use `setButtonDisab
 }
 ```
 
-You can also combine both approaches — `require_all_fields` handles the simple case, while `setButtonDisabled(true)` from a script adds additional blocking conditions. The button is disabled if **either** `require_all_fields` has unmet requirements **or** `setButtonDisabled(true)` was called from a script.
+You can also combine both approaches — required field checking handles the simple case automatically, while `setButtonDisabled(true)` from a script adds additional blocking conditions. The button is disabled if **either** any required fields are unfilled **or** `setButtonDisabled(true)` was called from a script.
 
 **`setButtonLoading(true)`** shows a spinner animation on the button — useful for async operations like API calls where the user should wait.
 
 Both `setButtonDisabled` and `setButtonLoading` reset to `false` automatically on page navigation.
+
+#### Script-Controlled Validation Errors
+
+Use `setValidationError(componentId, message)` to show custom error messages on any field from scripts. Pass `null` to clear:
+
+```typescript
+{
+  hooks: {
+    on_change: async (ctx) => {
+      // Custom async validation or LLM-powered feedback
+      const resp = await ctx.fetch("https://api.example.com/validate", {
+        method: "POST",
+        body: JSON.stringify({ answer: ctx.field_value }),
+      });
+      const data = await resp.json();
+      if (!data.valid) {
+        ctx.setValidationError(ctx.field_id, data.feedback); // e.g. "Almost! Think about X"
+      } else {
+        ctx.setValidationError(ctx.field_id, null); // Clear error
+      }
+    }
+  }
+}
+```
+
+This works with **any input type** — not just quiz components. Combine with `on_change` hooks to provide real-time feedback from REST APIs or LLMs as the user types/selects.
 
 ### Component Width (Multi-Column Layout)
 
@@ -842,9 +881,23 @@ Add quiz scoring to any multiple choice or input component:
   "type": "multiple_choice",
   "label": "What does CTA stand for?",
   "options": ["Click To Act", "Call To Action", "Create The Ad"],
-  "quiz": { "correct_answer": "Call To Action", "points": 10, "explanation": "CTA = Call To Action" }
+  "quiz": {
+    "correct_answer": "Call To Action",
+    "points": 10,
+    "explanation": "CTA = Call To Action",
+    "wrong_message": "Not quite — CTA stands for Call To Action!",
+    "correct_message": "You nailed it!",
+    "option_messages": {
+      "Click To Act": "Close, but 'Click To Act' isn't a standard marketing term.",
+      "Create The Ad": "That's a common misconception — CTA is about the action, not the ad."
+    }
+  }
 }
 ```
+
+- `wrong_message` — custom text shown when the answer is wrong (default: "You got the wrong answer.")
+- `correct_message` — custom text shown when the answer is right (default: "Correct!")
+- `option_messages` — per-option messages keyed by option value, shown when that specific wrong option is selected (overrides `wrong_message` for that option)
 
 Scoring is **case-insensitive** and tolerates type mismatches — `correct_answer: "Call To Action"` matches a user selecting `"call to action"`, and `correct_answer: ["c"]` (single-element array) works the same as `correct_answer: "c"` for single-select inputs.
 
@@ -878,7 +931,7 @@ When `reveal_on_select` is `true`, the flow is two-step:
 2. When they click **Continue**, answers are revealed:
    - Correct answers get a **green border**
    - Wrong selections get a **red border**
-   - A feedback banner shows "Correct!" or "You got the wrong answer."
+   - A feedback banner shows the `correct_message` / `wrong_message` (or per-option `option_messages[value]` if set)
    - The explanation text is displayed (if provided)
    - Options become **locked**
    - A banner says "Answers revealed! Review your results above, then click Continue to proceed."
@@ -908,7 +961,7 @@ Display a vertical timeline with alternating or single-side layout:
 
 **Variants:** `"default"` (all items on the right), `"alternating"` (items alternate left/right on desktop, stack on mobile).
 
-Each item supports: `title` (required), `description` (optional, markdown), `icon` (emoji in colored circle), `image` (URL for a round image), `color` (per-item color, falls back to theme), `button` (embedded button, see [Embedded Buttons](#embedded-buttons)), `checkbox` (`true` or `{ "label": "Custom" }` for an interactive checkbox).
+Each item supports: `title` (required), `description` (optional, markdown), `icon` (emoji in colored circle), `image` (URL for a round image), `color` (per-item color, falls back to theme), `button` (embedded button below description, see [Embedded Buttons](#embedded-buttons)), `side_button` (embedded button rendered inline with the title at top-right of card), `checkbox` (`true` or `{ "label": "Custom" }` for an interactive checkbox).
 
 ### File Upload
 
@@ -1193,29 +1246,48 @@ Timeline items support an `inputs` array for embedding input fields inside timel
 }
 ```
 
-### Nested Inputs in Checkboxes
+### Checkboxes as Section Cards
 
-Checkbox options support an `inputs` array. When a checkbox option is selected, nested inputs slide in below it in an indented left-bordered panel. Values are stored with compound IDs: `checkboxComponentId.optionValue.inputId`.
+Checkboxes are a first-class section card component. Each option acts as an expandable card — when checked, it reveals nested sub-components (inputs, display content, even other checkboxes) below the toggle row. The toggle and nested content are separate DOM regions so clicks on nested inputs never accidentally toggle the checkbox.
+
+Options support: `value`, `label`, `description`, `image` (thumbnail), `button` (side link), and `inputs` (array of nested sub-components).
+
+Values are stored with compound IDs: `checkboxComponentId.optionValue.inputId`.
 
 ```json
 {
-  "id": "interests",
+  "id": "onboarding_tasks",
   "type": "checkboxes",
   "props": {
-    "label": "What are you interested in?",
+    "label": "Complete your onboarding",
     "options": [
       {
-        "value": "coaching",
-        "label": "1-on-1 Coaching",
+        "value": "gcash",
+        "label": "Setup GCash USDC",
+        "description": "Connect your crypto wallet for payouts",
+        "button": { "label": "What is GCash?", "url": "https://example.com/gcash", "style": "ghost", "size": "sm" },
         "inputs": [
-          { "id": "coach_pref", "type": "short_text", "label": "Preferred coach name", "placeholder": "Optional" }
+          { "id": "wallet", "type": "solana_address", "label": "Your GCash Solana USDC Address", "required": true },
+          { "id": "note", "type": "paragraph", "props": { "text": "This is your Solana wallet address from GCash — **not** your GCash phone number." } }
         ]
       },
       {
-        "value": "group",
-        "label": "Group Sessions",
+        "value": "eth",
+        "label": "Setup Ethereum Wallet",
+        "image": "https://example.com/eth-icon.png",
         "inputs": [
-          { "id": "group_size", "type": "dropdown", "label": "Preferred group size", "props": { "options": ["Small (3-5)", "Medium (6-10)", "Large (10+)"] } }
+          { "id": "eth-wallet", "type": "evm_address", "label": "Your ETH Address", "required": true }
+        ]
+      },
+      {
+        "value": "preferences",
+        "label": "Set Your Preferences",
+        "inputs": [
+          { "id": "group_size", "type": "dropdown", "label": "Preferred group size", "props": { "options": ["Small (3-5)", "Medium (6-10)", "Large (10+)"] } },
+          { "id": "sub_tasks", "type": "checkboxes", "label": "Sub-tasks", "props": { "options": [
+            { "value": "read_docs", "label": "Read the documentation" },
+            { "value": "watch_video", "label": "Watch intro video", "button": { "label": "Watch", "url": "https://example.com/video", "style": "primary", "size": "sm" } }
+          ] } }
         ]
       },
       { "value": "self_paced", "label": "Self-Paced Learning" }
@@ -1223,6 +1295,22 @@ Checkbox options support an `inputs` array. When a checkbox option is selected, 
   }
 }
 ```
+
+**Supported nested item types:**
+
+- **Input types:** `short_text`, `long_text`, `email`, `phone`, `url`, `number`, `dropdown`, `multiple_choice`, `checkboxes` (nested!), `switch`, `checkbox`, `star_rating`, `slider`, `opinion_scale`, `file_upload`, `signature`, `solana_address`, `evm_address`, `bitcoin_address`
+- **Display types:** `paragraph`, `heading`, `banner`, `image`, `divider`, `html`, `callout` — rendered as static content (no form value stored)
+
+**Option properties:**
+
+| Property | Type | Description |
+|---|---|---|
+| `value` | string | *(required)* Unique identifier for the option |
+| `label` | string | *(required)* Display text |
+| `description` | string | Small subtext below the label |
+| `image` | string | Thumbnail image URL (rounded, 32x32) |
+| `button` | EmbeddedButton | Side link button (see [Embedded Buttons](#embedded-buttons)) |
+| `inputs` | array | Nested sub-components revealed when checked |
 
 ### Progress Line
 
@@ -1300,7 +1388,7 @@ Attach hooks to pages (`hooks.on_enter`, `hooks.on_before_next`, `hooks.on_exit`
 
 Each hook receives a `ScriptContext` (`ctx`) with:
 - Read-only: `formState`, `vars`, `hints`, `url_params`, `page_id`, `quiz_scores`, `field_id`/`field_value`/`prev_value` (on_change only)
-- Mutation methods: `setField(id, value)`, `setVar(key, value)`, `setComponentProp(id, prop, value)`, `setNextPage(pageId)`
+- Mutation methods: `setField(id, value)`, `setVar(key, value)`, `setComponentProp(id, prop, value)`, `setNextPage(pageId)`, `setValidationError(id, message|null)`
 - `fetch` for async API calls
 - Timers: `setTimeout(fn, ms)`, `setInterval(fn, ms)`, `clearTimeout(id)`, `clearInterval(id)` — auto-cleaned on page transition
 - Popup control: `showPopup(popupId)`, `dismissPopup(popupId)`
