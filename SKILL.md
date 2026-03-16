@@ -443,15 +443,44 @@ Set theme options under `settings.theme`:
 - `background_color` — hex color for page background
 - `background_overlay` — `"dark"`, `"light"`, `"none"`, or a number 0–1
 
-### Component Types (57 total)
+### Component Types (59 total)
 
 **Input (27):** `short_text`, `long_text`, `rich_text`, `email`, `phone`, `url`, `password`, `number`, `currency`, `date`, `datetime`, `time`, `date_range`, `dropdown`, `multiselect`, `multiple_choice`, `checkboxes`, `picture_choice`, `star_rating`, `slider`, `file_upload`, `signature`, `address`, `location`, `switch`, `checkbox`, `choice_matrix`, `ranking`, `opinion_scale`
 
-**Display (12):** `heading`, `paragraph`, `banner`, `image`, `video`, `pdf_viewer`, `social_links`, `html`, `divider`, `faq`, `testimonial`, `pricing_card`, `timeline`
+**Display (14):** `heading`, `paragraph`, `banner`, `image`, `video`, `pdf_viewer`, `social_links`, `html`, `divider`, `faq`, `testimonial`, `pricing_card`, `timeline`, `iframe`, `custom`
 
 **Layout (3):** `section_collapse`, `table`, `subform`
 
 **Page features:** `payment`, `captcha`
+
+### Shared Input Props
+
+All input components support these base props for labels, help text, and validation:
+
+| Prop | Type | Description |
+|---|---|---|
+| `label` | `string` | Main label displayed above the input |
+| `sublabel` | `string` | Smaller secondary text below the main label (alias: `subheading`) |
+| `description` | `string` | Helper text below the sublabel, lighter styling |
+| `tooltip` | `string` | Info icon (ⓘ) next to label — hover/tap shows explanatory popover |
+| `required` | `boolean` | Marks field as required (red asterisk) |
+| `placeholder` | `string` | Placeholder text inside the input |
+| `hidden` | `boolean` | Hides the field from the UI |
+
+Example with all label props:
+```json
+{
+  "id": "tg_username",
+  "type": "short_text",
+  "props": {
+    "label": "Your Telegram Username",
+    "sublabel": "We'll use this to add you to the team group",
+    "tooltip": "Go to Telegram Settings > Username to find or set yours",
+    "placeholder": "@username",
+    "required": true
+  }
+}
+```
 
 ### Heading Component
 
@@ -682,6 +711,70 @@ In the receiving catalog, set up `prefill_mappings` so URL params populate the r
 ```
 
 When a visitor arrives at Catalog B via `?email=a@b.com&name=John&phone=555`, the `contact_info` page is auto-skipped and they land directly on `preferences`. If any param is missing, they see the page with partial prefill.
+
+### Disabled Button Until Required Fields Are Filled
+
+> **Common mistake:** Setting `required: true` on individual fields only adds a visual indicator (asterisk). To actually **disable the submit/continue button** until required fields are filled, you must also set `require_all_fields: true` on the **page**. Both are needed.
+
+Set `require_all_fields: true` on a page to auto-disable the Continue/Submit button until every visible `required` field has a value. The button renders with 50% opacity and `cursor-not-allowed` until all conditions are met.
+
+**Two things are needed:**
+1. `require_all_fields: true` on the **page** — enables the auto-disable behavior
+2. `required: true` on each **field** that must be filled — marks which fields block the button
+
+```json
+{
+  "contact_info": {
+    "title": "Your Details",
+    "require_all_fields": true,
+    "components": [
+      { "id": "email", "type": "email", "props": { "label": "Email", "required": true } },
+      { "id": "name", "type": "short_text", "props": { "label": "Name", "required": true } },
+      { "id": "newsletter", "type": "checkbox", "props": { "label": "Subscribe to newsletter" } }
+    ]
+  }
+}
+```
+
+In this example, the button stays disabled until both `email` and `name` have values. The optional `newsletter` checkbox doesn't block navigation.
+
+**How it works:**
+- Only checks visible, non-readonly, non-hidden required fields
+- Respects visibility conditions — if a required field is conditionally hidden, it doesn't block
+- Works with arrays (multiselect, checkboxes) — checks `value.length > 0`
+- Works with both inline buttons and sticky bottom bars
+- Nested inputs from checked checkboxes are included in validation
+- The button is still clickable for screen readers but `disabled` prevents action
+
+#### Script-Controlled Button State
+
+For more complex logic (e.g., async validation, API checks), use `setButtonDisabled()` and `setButtonLoading()` in script hooks:
+
+```typescript
+{
+  hooks: {
+    on_enter: (ctx) => {
+      // Disable button until an API call succeeds
+      ctx.setButtonDisabled(true);
+      ctx.setButtonLoading(true);
+
+      ctx.fetch("https://api.example.com/check")
+        .then(r => r.json())
+        .then(data => {
+          ctx.setField("status", data.status);
+          ctx.setButtonDisabled(false);
+          ctx.setButtonLoading(false);
+        });
+    }
+  }
+}
+```
+
+You can also combine both approaches — `require_all_fields` handles the simple case, while `setButtonDisabled(true)` from a script adds additional blocking conditions. The button is disabled if **either** `require_all_fields` has unmet requirements **or** `setButtonDisabled(true)` was called from a script.
+
+**`setButtonLoading(true)`** shows a spinner animation on the button — useful for async operations like API calls where the user should wait.
+
+Both `setButtonDisabled` and `setButtonLoading` reset to `false` automatically on page navigation.
 
 ### Component Width (Multi-Column Layout)
 
@@ -959,6 +1052,102 @@ Collapsible callout:
 | `text` | string | — | Body text (supports markdown) |
 | `icon` | string | — | Override the default icon (emoji) |
 | `collapsible` | boolean | `false` | Renders as expandable/collapsible (requires `title`) |
+
+### Iframe Component
+
+Embed any external URL in your catalog. The `src` supports `{{field_id}}` templates for dynamic URLs that update as visitors fill in fields.
+
+```json
+{
+  "id": "demo_embed",
+  "type": "iframe",
+  "props": {
+    "src": "https://app.example.com/preview?email={{comp_email}}&plan={{comp_plan}}",
+    "height": 500,
+    "border_radius": 12,
+    "title": "Live Preview"
+  }
+}
+```
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `src` | string | — | URL to embed. Supports `{{field_id}}` templates (values are URL-encoded) |
+| `height` | number \| string | `400` | Height in px or CSS value |
+| `width` | string | `"100%"` | CSS width value |
+| `border_radius` | number | `16` | Border radius in px |
+| `sandbox` | string | `"allow-scripts allow-same-origin allow-forms"` | iframe sandbox attribute |
+| `allow` | string | `""` | iframe allow attribute (e.g. `"camera; microphone"`) |
+| `border` | boolean | `false` | Show a border around the iframe |
+| `title` | string | `"Embedded content"` | Accessibility title |
+
+The iframe URL re-resolves reactively — when a visitor fills in `comp_email`, the iframe immediately reloads with the updated URL.
+
+### Custom React Component
+
+For power users who need full React interactivity beyond what the built-in 57 component types offer. Load your own React components via an external script and reference them by name.
+
+**Step 1:** Add a script tag that registers your components on `window.__catalogkit_components`:
+
+```json
+{
+  "settings": {
+    "scripts": [
+      { "src": "https://cdn.example.com/my-components.js", "position": "head" }
+    ]
+  }
+}
+```
+
+**Step 2:** In your script, register components:
+
+```javascript
+// my-components.js
+window.__catalogkit_components = window.__catalogkit_components || {};
+
+window.__catalogkit_components.PriceCalculator = ({ formState, setField, themeColor, quantity }) => {
+  const price = (quantity || 1) * 29.99;
+  return React.createElement('div', {
+    style: { padding: '16px', borderRadius: '12px', border: '1px solid #e5e7eb' }
+  },
+    React.createElement('p', { style: { fontSize: '24px', fontWeight: 'bold', color: themeColor } },
+      '$' + price.toFixed(2)
+    ),
+    React.createElement('button', {
+      onClick: () => setField('comp_price', price),
+      style: { marginTop: '8px', padding: '8px 16px', backgroundColor: themeColor, color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer' }
+    }, 'Lock in price')
+  );
+};
+```
+
+**Step 3:** Reference it in your catalog schema:
+
+```json
+{
+  "id": "price_calc",
+  "type": "custom",
+  "props": {
+    "component": "PriceCalculator",
+    "quantity": 3
+  }
+}
+```
+
+**Props passed to your component:**
+| Prop | Description |
+|------|-------------|
+| `themeColor` | The catalog's theme color (hex string) |
+| `formState` | Read-only snapshot of all form field values |
+| `setField(componentId, value)` | Set any form field value |
+| `...props` | All other props from the schema (e.g. `quantity` above) |
+
+**Important notes:**
+- Your script must register components on `window.__catalogkit_components` — the renderer polls for up to 5 seconds after page load
+- Components are wrapped in an error boundary — if your component throws, a friendly error message is shown instead of crashing the catalog
+- React is available globally (the catalog already loads it) — use `React.createElement` or bundle JSX yourself
+- The component re-renders when `formState` changes, just like built-in components
+- For TypeScript catalogs, `type: "custom"` works identically
 
 ### Nested Inputs in Timeline
 
