@@ -2,13 +2,13 @@
 name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
-  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety and real function hooks.
-  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit, image upload, image compression, webp, typescript, ts config, on_init, on_tick, globals, timers, global state
+  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety and real function hooks, (14) Uploading and hosting downloadable files (PDFs, ZIPs, docs) with credit-based billing.
+  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit, image upload, image compression, webp, typescript, ts config, on_init, on_tick, globals, timers, global state, file upload, file download, downloadable, hosted files
 ---
 
 # Catalog Kit
 
-Build and manage marketing catalogs, landing pages, and multi-step funnels — directly through your AI agent. Create catalogs with 57+ component types, publish them instantly, run A/B tests with weighted variants, and monitor conversion analytics in real time.
+Build and manage marketing catalogs, landing pages, and multi-step funnels — directly through your AI agent. Create catalogs with 60+ component types, publish them instantly, run A/B tests with weighted variants, and monitor conversion analytics in real time.
 
 > **Install on OfficeX:** [officex.app/store/en/app/catalog-kit](https://officex.app/store/en/app/catalog-kit)
 
@@ -23,8 +23,10 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Element inspector** — hold Shift+Alt to hover-inspect any element (including the top navbar) and copy its exact `pageId/componentId` reference for AI agents
 - **View visitor journeys** — trace exactly what each visitor did step by step
 - **Manage access** — create API keys for team members or integrations
-- **Upload videos** — add video content with automatic HLS transcoding
-- **Upload images** — upload images with automatic WebP compression and thumbnail generation (free)
+- **Managed media hosting** — images and videos are stored, compressed, and served via CDN for you — no need to bring your own S3 bucket
+- **Upload images (free)** — automatic WebP compression, thumbnail generation, and CDN delivery at no credit cost
+- **Upload videos** — automatic HLS transcoding for adaptive streaming, served via CDN
+- **Upload & download files** — host downloadable files (PDFs, ZIPs, docs) on S3 with CDN delivery, credit-billed per 50MB
 - **Scripting hooks** — add imperative logic (API calls, dynamic routing, cross-page state) at page and component lifecycle points
 - **TypeScript-as-config** — author catalogs as .ts files with full type safety and real function hooks, then push via CLI
 
@@ -323,9 +325,15 @@ Manage API keys for team members or integrations.
 
 ---
 
+## Media Hosting
+
+Catalog Kit includes **managed media storage** — you do not need to bring your own S3 bucket or CDN. Upload images and videos through the API, and we handle storage, compression, transcoding, and CDN delivery automatically. All media URLs returned are production-ready and can be used directly as `src` values in your catalog components.
+
+---
+
 ## Images
 
-Upload images with automatic compression to WebP for fast loading. Compression is free and happens automatically via a background Lambda.
+Upload images with automatic compression to WebP for fast loading. Image uploads are **free** (no credits charged) — compression happens automatically via a background Lambda and files are served through our CDN.
 
 ### Upload an image
 
@@ -382,17 +390,91 @@ Set `"no_compress": true` in the upload request. The original URL is used direct
 - **Thumbnail**: 400px width, quality 70
 - **Supported input**: JPEG, PNG, GIF, WebP, TIFF, BMP, AVIF, HEIC/HEIF
 - **Cost**: Free (no credits charged)
-- **Originals**: Auto-deleted after 30 days (compressed versions persist)
+- **Originals**: Auto-deleted after 1 year (compressed versions persist)
 
 ---
 
 ## Videos
 
-Upload video content to use in your catalogs with automatic HLS transcoding:
+Upload video content to your managed media bucket with automatic HLS transcoding for adaptive streaming. Videos are served via CDN — no external hosting needed.
 
-- `POST /api/v1/videos/upload` — Upload a video file
-- `GET /api/v1/videos/:videoId/status` — Check transcoding progress
-- `GET /api/v1/videos/:videoId/hls_url` — Get the playback URL
+- `POST /api/v1/videos/upload` — Get a presigned upload URL (credits charged per 100MB)
+- `POST /api/v1/videos/:videoId/transcode` — Start HLS transcoding (credits charged per estimated minute)
+- `GET /api/v1/videos/:videoId/status` — Check transcoding progress and get the playback URL
+
+---
+
+## Files
+
+Upload and host downloadable files (PDFs, ZIPs, documents, etc.) on managed S3 storage with CDN delivery. Files are scoped per-user and billed at **1 credit per 50MB** (minimum 1 credit). Files are retained for **1 year**.
+
+### Upload a file
+
+```
+POST https://api.catalogkit.cc/api/v1/files/upload
+```
+
+```json
+{
+  "filename": "pricing-guide.pdf",
+  "content_type": "application/pdf",
+  "size_bytes": 5000000
+}
+```
+
+**Response (201):**
+```json
+{
+  "ok": true,
+  "data": {
+    "file_id": "01ABC...",
+    "upload_url": "https://s3.amazonaws.com/...",
+    "cdn_url": "https://cdn.../media/files/...",
+    "filename": "pricing-guide.pdf",
+    "size_bytes": 5000000,
+    "credits_charged": 1
+  }
+}
+```
+
+Upload the file using the presigned `upload_url` (PUT request with the file body). Use the `cdn_url` as the `src` in a `file_download` display component.
+
+### Get download URL
+
+```
+GET https://api.catalogkit.cc/api/v1/files/:fileId/download
+```
+
+Returns a presigned download URL (1-hour expiry) with `Content-Disposition: attachment` for browser download.
+
+### List files
+
+```
+GET https://api.catalogkit.cc/api/v1/files
+```
+
+### File Download Component
+
+Use the `file_download` display component to render a download button in your catalog:
+
+```json
+{
+  "id": "download_guide",
+  "type": "file_download",
+  "props": {
+    "src": "https://cdn.../media/files/user123/fileId/pricing-guide.pdf",
+    "filename": "Pricing Guide.pdf",
+    "size_bytes": 5000000,
+    "button_text": "Download",
+    "style": "primary",
+    "description": "Complete pricing breakdown"
+  }
+}
+```
+
+Props: `src` (required), `filename` (required), `size_bytes`, `button_text`, `style` ("primary" | "secondary" | "outline" | "ghost"), `description`, `icon`.
+
+The download opens in a new tab to prevent losing form progress on mobile.
 
 ---
 
@@ -443,11 +525,11 @@ Set theme options under `settings.theme`:
 - `background_color` — hex color for page background
 - `background_overlay` — `"dark"`, `"light"`, `"none"`, or a number 0–1
 
-### Component Types (59 total)
+### Component Types (61 total)
 
 **Input (27):** `short_text`, `long_text`, `rich_text`, `email`, `phone`, `url`, `password`, `number`, `currency`, `date`, `datetime`, `time`, `date_range`, `dropdown`, `multiselect`, `multiple_choice`, `checkboxes`, `picture_choice`, `star_rating`, `slider`, `file_upload`, `signature`, `address`, `location`, `switch`, `checkbox`, `choice_matrix`, `ranking`, `opinion_scale`
 
-**Display (14):** `heading`, `paragraph`, `banner`, `image`, `video`, `pdf_viewer`, `social_links`, `html`, `divider`, `faq`, `testimonial`, `pricing_card`, `timeline`, `iframe`, `custom`
+**Display (16):** `heading`, `paragraph`, `banner`, `image`, `video`, `pdf_viewer`, `file_download`, `social_links`, `html`, `divider`, `faq`, `testimonial`, `pricing_card`, `timeline`, `iframe`, `modal`, `custom`
 
 **Layout (3):** `section_collapse`, `table`, `subform`
 
@@ -491,8 +573,38 @@ Choice components (`multiple_choice`, `checkboxes`, `dropdown`) support an optio
 | `other_option` | `boolean` | `false` | Appends an "Other" choice. Selecting it reveals a text input. |
 | `other_label` | `string` | `"Other"` | Custom label for the "Other" button. |
 | `other_placeholder` | `string` | — | Placeholder for the free-text input. |
+| `require_all` | `boolean` | `false` | (checkboxes/multiple_choice) Require ALL options to be selected. When combined with `required: true` and `require_all_fields`, the button stays disabled until every option is checked and every nested required input is filled. |
 
 Value is stored as `__other__:<text>`. **Do not set `other_option: true` unless you intentionally want a free-text fallback** — otherwise an unexpected textarea will render.
+
+### Picture Choice Component
+
+Visual option picker with image cards. Each option has an image, label, and value. Supports single or multi-select.
+
+```json
+{
+  "id": "platform",
+  "type": "picture_choice",
+  "props": {
+    "label": "Select your platform",
+    "required": true,
+    "image_fit": "contain",
+    "options": [
+      { "label": "X (Twitter)", "value": "twitter", "image": "https://example.com/x-logo.png" },
+      { "label": "LinkedIn", "value": "linkedin", "image": "https://example.com/linkedin-logo.png" },
+      { "label": "Reddit", "value": "reddit", "image": "https://example.com/reddit-logo.png" }
+    ]
+  }
+}
+```
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `options` | `array` | `[]` | Array of `{ label, value, image }` objects. `image` is a URL |
+| `multiple` | `boolean` | `false` | Allow selecting more than one option |
+| `image_fit` | `"contain"` / `"cover"` | `"contain"` | How images fit within the card. `contain` shows the full image with padding (safe default for mixed aspect ratios — logos, icons, photos). `cover` crops to fill the card (use only when all images share similar aspect ratios) |
+
+**Choosing `image_fit`:** Use the default `"contain"` for logos, icons, or any set of images with varying dimensions — it guarantees every image is fully visible. Only switch to `"cover"` when all images are photos or illustrations with a consistent landscape aspect ratio.
 
 ### Heading Component
 
@@ -651,7 +763,7 @@ Input components support a `prefill_mode` property that controls how prefilled v
 
 - `"editable"` (default) — prefilled value is shown in a normal editable input
 - `"readonly"` — value is shown in a styled read-only input with a **copy-to-clipboard button**. The user can click the clipboard icon to copy the value. Useful for displaying generated codes, API keys, referral links, or any value the user needs to copy but shouldn't edit.
-- `"hidden"` — the component is completely hidden when prefilled (useful for passing data silently)
+- `"hidden"` — the component is completely hidden when prefilled (useful for passing data silently). **Important:** the field only hides when it receives a value via prefill (URL params or defaults). If no prefill value is provided, the field renders as a normal editable input. This mode is designed for silently carrying data between catalogs — do not use it on fields you expect the user to fill manually.
 
 ```json
 {
@@ -767,8 +879,12 @@ In this example, the button stays disabled until both `email` and `name` have va
 - Only checks visible, non-readonly, non-hidden required fields
 - Respects visibility conditions — if a required field is conditionally hidden, it doesn't block
 - Works with arrays (multiselect, checkboxes) — checks `value.length > 0`
+- **`require_all` prop (checkboxes/multiple_choice):** When set to `true` on a checkboxes or multiple_choice component, ALL options must be selected (not just one). All nested required inputs are also validated regardless of selection state.
+- **Boolean fields (`switch`, `checkbox`) require a truthy value** — a required switch/checkbox must be checked (toggled on) to satisfy validation. Unchecking re-disables the button.
 - Works with both inline buttons and sticky bottom bars
-- Nested inputs from checked checkboxes are included in validation
+- Nested inputs from checked checkboxes are included in validation (or ALL nested inputs when `require_all: true`)
+- **Format validation:** Address types (`solana_address`, `evm_address`, `bitcoin_address`) keep the button disabled when the value is present but format-invalid (e.g. not a valid base58 Solana address). Applies to both top-level and nested inputs.
+- **Respects script `propOverrides`** — if a script dynamically sets `required`, `hidden`, or `readonly` on a component via `ctx.setProp()`, the button state updates in real time
 - The button renders with 50% opacity and `cursor-not-allowed` when disabled
 
 #### Script-Controlled Button State
@@ -998,6 +1114,22 @@ Multi-file example:
 
 **Properties:** `multiple` (boolean, default false), `accept` (string, e.g. `"image/*,.pdf"`), `max_files` (number, default 10), `max_size_mb` (number, default 25).
 
+### Password
+
+Password input with a toggleable show/hide button (eye icon). Uses `type="password"` by default and switches to `type="text"` when the user clicks the eye icon.
+
+```json
+{
+  "id": "user_password",
+  "type": "password",
+  "props": {
+    "label": "Create a password",
+    "placeholder": "Enter password",
+    "required": true
+  }
+}
+```
+
 ### Signature
 
 Canvas-based drawing pad for capturing signatures. Value is stored as a base64 PNG data URL. Includes a Clear button to reset.
@@ -1148,9 +1280,37 @@ Embed any external URL in your catalog. The `src` supports `{{field_id}}` templa
 
 The iframe URL re-resolves reactively — when a visitor fills in `comp_email`, the iframe immediately reloads with the updated URL.
 
+### Modal (Info Popup)
+
+A button that opens a scrollable modal dialog. Perfect for terms & conditions, privacy policies, detailed product info, or any content that would clutter the page. The body supports markdown-style formatting (bold, italic, links, lists).
+
+```json
+{
+  "id": "terms_modal",
+  "type": "modal",
+  "props": {
+    "button_label": "View Terms & Conditions",
+    "button_style": "link",
+    "title": "Terms & Conditions",
+    "body": "## 1. Acceptance of Terms\n\nBy accessing and using this service, you accept and agree to be bound by the terms...\n\n## 2. Use License\n\n- Permission is granted to temporarily use this service\n- This is the grant of a license, not a transfer of title\n\n## 3. Disclaimer\n\nThe materials on this website are provided on an **as is** basis...",
+    "max_width": "640px"
+  }
+}
+```
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `button_label` | string | `"View"` | Text on the trigger button |
+| `button_style` | `"primary"` \| `"outline"` \| `"ghost"` \| `"link"` | `"primary"` | Visual style of the trigger button |
+| `title` | string | — | Header shown at the top of the modal |
+| `body` | string | `""` | Scrollable content (supports markdown-style bold, italic, links, lists) |
+| `max_width` | string | `"640px"` | Maximum width of the modal dialog |
+
+The modal closes by clicking the X button, pressing Escape, clicking the backdrop overlay, or the Close footer button.
+
 ### Custom React Component
 
-For power users who need full React interactivity beyond what the built-in 57 component types offer. Load your own React components via an external script and reference them by name.
+For power users who need full React interactivity beyond what the built-in component types offer. Load your own React components via an external script and reference them by name.
 
 **Step 1:** Add a script tag that registers your components on `window.__catalogkit_components`:
 
@@ -1303,8 +1463,23 @@ Values are stored with compound IDs: `checkboxComponentId.optionValue.inputId`.
 
 **Supported nested item types:**
 
-- **Input types:** `short_text`, `long_text`, `email`, `phone`, `url`, `number`, `dropdown`, `multiple_choice`, `checkboxes` (nested!), `switch`, `checkbox`, `star_rating`, `slider`, `opinion_scale`, `file_upload`, `signature`, `solana_address`, `evm_address`, `bitcoin_address`
+- **Input types:** `short_text`, `long_text`, `email`, `phone`, `url`, `password`, `number`, `dropdown`, `multiple_choice`, `checkboxes` (nested!), `switch`, `checkbox`, `star_rating`, `slider`, `opinion_scale`, `file_upload`, `signature`, `solana_address`, `evm_address`, `bitcoin_address`
 - **Display types:** `paragraph`, `heading`, `banner`, `image`, `divider`, `html`, `callout` — rendered as static content (no form value stored)
+
+**Nested input properties:**
+
+Each item in the `inputs` array has these fields:
+
+| Property | Type | Description |
+|---|---|---|
+| `id` | string | *(required)* Unique identifier for the nested input |
+| `type` | string | *(required)* Input type (e.g. `short_text`, `solana_address`, `paragraph`) |
+| `label` | string | Display label above the input |
+| `placeholder` | string | Placeholder text |
+| `required` | boolean | Mark this nested input as required. Can be set here OR inside `props.required` — both are supported. |
+| `props` | object | Additional props passed to the input component (e.g. `{ "required": true, "sublabel": "..." }`) |
+
+> **Important for AI agents:** `required` can be placed at `input.required` (top-level) OR `input.props.required` (inside props). Both work identically. Example: `{ "id": "wallet", "type": "solana_address", "required": true }` is equivalent to `{ "id": "wallet", "type": "solana_address", "props": { "required": true } }`.
 
 **Option properties:**
 
@@ -1441,17 +1616,26 @@ const catalog = {
 
 ---
 
-## CLI
+## CLI (`@officexapp/catalogs-cli`)
+
+Install the CLI from npm:
+
+```bash
+npm install -g @officexapp/catalogs-cli
+```
 
 Manage catalogs from the command line:
 
 ```bash
-npx catalogs catalog push schema.json --publish    # Push a JSON catalog
-npx catalogs catalog push catalog.ts --publish     # Push a TypeScript catalog (functions auto-serialized)
-npx catalogs catalog list                           # List all your catalogs
-npx catalogs video upload ./intro.mp4               # Upload a video
-npx catalogs video status VIDEO_ID                  # Check transcoding progress
+catalogs catalog push schema.json --publish    # Push a JSON catalog
+catalogs catalog push catalog.ts --publish     # Push a TypeScript catalog (functions auto-serialized)
+catalogs catalog list                           # List all your catalogs
+catalogs video upload ./intro.mp4               # Upload a video
+catalogs video status VIDEO_ID                  # Check transcoding progress
+catalogs whoami                                 # Test API connection
 ```
+
+Or run without installing via `npx @officexapp/catalogs-cli <command>`.
 
 ---
 
@@ -1666,7 +1850,7 @@ Built-in developer tool for AI agent workflows. Hold **Shift+Alt** and hover ove
 
 ## Event Tracking (Free)
 
-Visitor events are tracked automatically by the catalog frontend. You can also send custom events:
+Visitor events are tracked automatically by the catalog frontend using first-party same-origin requests (ad blocker proof). You can also send custom events via the API:
 
 ```
 POST https://api.catalogkit.cc/events
@@ -1675,3 +1859,5 @@ POST https://api.catalogkit.cc/events
 **Valid event types:** `page_view`, `field_change`, `field_complete`, `form_submit`, `action_click`, `exit_intent`, `session_start`, `session_resume`, `cart_add`, `cart_remove`, `checkout_start`, `checkout_skip`, `checkout_complete`, `payment_info_added`, `offer_declined`, `lead_captured`, `video_play`, `video_pause`, `video_progress`, `video_complete`, `video_chapter`, `video_seek`, `page_auto_skipped`, `popup_shown`, `popup_dismissed`, `popup_converted`
 
 Batch up to 25 events: `POST /events/batch` with `{ "events": [...] }`
+
+**Note:** The catalog frontend uses same-origin paths (`/e`, `/e/batch`) proxied through CloudFront for reliability. The cross-origin API endpoints above are for server-side or external integrations.
