@@ -2,8 +2,8 @@
 name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
-  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Adding scripting hooks for dynamic behavior like API calls, conditional routing, and cross-page state, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety and real function hooks, (14) Uploading and hosting downloadable files (PDFs, ZIPs, docs) with credit-based billing, (15) Building custom interactive UI with the CatalogKit global API bridge (window.CatalogKit) for inline scripts, real-time field access, and multi-form isolation.
-  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, hooks, scripting, on_change, on_enter, on_submit, image upload, image compression, webp, typescript, ts config, on_init, on_tick, globals, timers, global state, file upload, file download, downloadable, hosted files, CatalogKit, window.CatalogKit, global api, inline script, html script, custom ui, api bridge, multi-form
+  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Submitting form data headlessly via the Agent API for AI agent integrations, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety, (14) Uploading and hosting downloadable files (PDFs, ZIPs, docs) with credit-based billing, (15) Building custom interactive UI with the CatalogKit global API bridge (window.CatalogKit) for inline scripts, real-time field access, and multi-form isolation, (16) AI agents can fill out catalog forms step-by-step via the stateful Agent Session API.
+  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, agent api, headless form, agent session, form submission api, image upload, image compression, webp, typescript, ts config, file upload, file download, downloadable, hosted files, CatalogKit, window.CatalogKit, global api, inline script, html script, custom ui, api bridge, multi-form
 ---
 
 # Catalog Kit
@@ -27,8 +27,8 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Upload images (free)** — automatic WebP compression, thumbnail generation, and CDN delivery at no credit cost
 - **Upload videos** — automatic HLS transcoding for adaptive streaming, served via CDN
 - **Upload & download files** — host downloadable files (PDFs, ZIPs, docs) on S3 with CDN delivery, credit-billed per 50MB
-- **Scripting hooks** — add imperative logic (API calls, dynamic routing, cross-page state) at page and component lifecycle points
-- **TypeScript-as-config** — author catalogs as .ts files with full type safety and real function hooks, then push via CLI
+- **Agent API** — AI agents can fill out catalog forms headlessly via the stateful session API
+- **TypeScript-as-config** — author catalogs as .ts files with full type safety, then push via CLI
 
 ## Getting Started
 
@@ -809,7 +809,7 @@ Set `auto_skip: true` on a page to automatically skip it when all visible input 
 With `?email=user@example.com&name=John` (mapped via `prefill_mappings`), this page is skipped entirely. Rules:
 - Only skips if the page has at least one visible input and **all** of them have values
 - Display-only pages (no inputs) are never auto-skipped
-- Runs after `on_enter` hooks, so hooks can set values that satisfy the skip condition
+- Runs after page-enter scripts, so scripts can set values that satisfy the skip condition
 - Skipped pages do NOT appear in browser history (Back button jumps past them)
 - A `page_auto_skipped` analytics event is fired for each skipped page
 
@@ -902,26 +902,21 @@ In this example, the button stays disabled until both `email` and `name` have va
 
 #### Script-Controlled Button State
 
-For more complex logic (e.g., async validation, API checks), use `setButtonDisabled()` and `setButtonLoading()` in script hooks:
+For more complex logic (e.g., async validation, API checks), use `setButtonDisabled()` and `setButtonLoading()` via the CatalogKit API (`window.CatalogKit`):
 
-```typescript
-{
-  hooks: {
-    on_enter: (ctx) => {
-      // Disable button until an API call succeeds
-      ctx.setButtonDisabled(true);
-      ctx.setButtonLoading(true);
+```javascript
+const kit = window.CatalogKit.get();
+kit.on('pageenter', async () => {
+  // Disable button until an API call succeeds
+  kit.setButtonDisabled(true);
+  kit.setButtonLoading(true);
 
-      ctx.fetch("https://api.example.com/check")
-        .then(r => r.json())
-        .then(data => {
-          ctx.setField("status", data.status);
-          ctx.setButtonDisabled(false);
-          ctx.setButtonLoading(false);
-        });
-    }
-  }
-}
+  const r = await fetch("https://api.example.com/check");
+  const data = await r.json();
+  kit.setField("status", data.status);
+  kit.setButtonDisabled(false);
+  kit.setButtonLoading(false);
+});
 ```
 
 You can also combine both approaches — required field checking handles the simple case automatically, while `setButtonDisabled(true)` from a script adds additional blocking conditions. The button is disabled if **either** any required fields are unfilled **or** `setButtonDisabled(true)` was called from a script.
@@ -934,27 +929,24 @@ Both `setButtonDisabled` and `setButtonLoading` reset to `false` automatically o
 
 Use `setValidationError(componentId, message)` to show custom error messages on any field from scripts. Pass `null` to clear:
 
-```typescript
-{
-  hooks: {
-    on_change: async (ctx) => {
-      // Custom async validation or LLM-powered feedback
-      const resp = await ctx.fetch("https://api.example.com/validate", {
-        method: "POST",
-        body: JSON.stringify({ answer: ctx.field_value }),
-      });
-      const data = await resp.json();
-      if (!data.valid) {
-        ctx.setValidationError(ctx.field_id, data.feedback); // e.g. "Almost! Think about X"
-      } else {
-        ctx.setValidationError(ctx.field_id, null); // Clear error
-      }
-    }
+```javascript
+const kit = window.CatalogKit.get();
+kit.on('fieldchange', async (e) => {
+  // Custom async validation or LLM-powered feedback
+  const resp = await fetch("https://api.example.com/validate", {
+    method: "POST",
+    body: JSON.stringify({ answer: e.value }),
+  });
+  const data = await resp.json();
+  if (!data.valid) {
+    kit.setValidationError(e.fieldId, data.feedback); // e.g. "Almost! Think about X"
+  } else {
+    kit.setValidationError(e.fieldId, null); // Clear error
   }
-}
+});
 ```
 
-This works with **any input type** — not just quiz components. Combine with `on_change` hooks to provide real-time feedback from REST APIs or LLMs as the user types/selects.
+This works with **any input type** — not just quiz components. Combine with CatalogKit `fieldchange` events to provide real-time feedback from REST APIs or LLMs as the user types/selects.
 
 ### Component Width (Multi-Column Layout)
 
@@ -1574,64 +1566,39 @@ Customize what visitors see after submitting:
 
 **Action types:** `fill_again` (reset form), `share` (copy URL), `redirect` (navigate to URL). All fields are optional — omit `completion` entirely for a minimal checkmark screen.
 
-### Scripting / Hooks
+### Scripting via CatalogKit API (`window.CatalogKit`)
 
-Imperative escape hatches within the declarative config. **Hooks must be authored as TypeScript functions** and pushed via the CLI (`npx catalogs catalog push catalog.ts`). The CLI serializes real functions into the correct format automatically — do not write hook strings in JSON by hand.
+All imperative logic — API calls, dynamic routing, cross-page state, validation — is handled through the CatalogKit API bridge (`window.CatalogKit`). Use inline `<script>` tags in `html` components or external scripts to subscribe to lifecycle events and mutate catalog state.
 
-Attach hooks to pages (`hooks.on_enter`, `hooks.on_before_next`, `hooks.on_exit`, `hooks.on_submit`) or components (`hooks.on_change`). Global hooks on the schema: `global_hooks.on_page_enter`, `global_hooks.on_page_exit`, `global_hooks.on_field_change`.
+```javascript
+const kit = window.CatalogKit.get();
 
-Each hook receives a `ScriptContext` (`ctx`) with:
-- Read-only: `formState`, `vars`, `hints`, `url_params`, `page_id`, `quiz_scores`, `field_id`/`field_value`/`prev_value` (on_change only)
-- Mutation methods: `setField(id, value)`, `setVar(key, value)`, `setComponentProp(id, prop, value)`, `setNextPage(pageId)`, `setValidationError(id, message|null)`
-- `fetch` for async API calls
-- Timers: `setTimeout(fn, ms)`, `setInterval(fn, ms)`, `clearTimeout(id)`, `clearInterval(id)` — auto-cleaned on page transition
-- Popup control: `showPopup(popupId)`, `dismissPopup(popupId)`
-- Global state: `globals`, `setGlobal(key, value)` — persists across pages for entire catalog session
-- Cross-page reads: `getField(componentId)`, `getAllFields()`, `getParam(key)`, `getAllParams()`
+// React to page entry
+kit.on('pageenter', (e) => {
+  kit.setVar("entered_at", Date.now());
+});
 
-`on_before_next` and `on_submit` can return `{ prevent: true }` to block navigation or `{ next_page: "page_id" }` to override routing. Scripts have a 5-second timeout and never crash the renderer.
+// Block navigation if email is missing
+kit.on('beforenext', (e) => {
+  if (!kit.getField('email')) {
+    e.preventDefault();
+  }
+});
 
-**Catalog-level hooks** (`global_hooks`): `on_page_enter`, `on_page_exit`, `on_field_change`, `on_init` (runs once on load), `on_tick` (runs on interval).
-
-```typescript
-// In your catalog.ts file — hooks are real functions, type-checked and auto-serialized by the CLI
-const catalog = {
-  pages: {
-    landing: {
-      title: "Get Started",
-      hooks: {
-        on_enter: (ctx) => {
-          ctx.setVar("entered_at", Date.now());
-        },
-        on_before_next: (ctx) => {
-          if (!ctx.formState.email) return { prevent: true };
-        },
-      },
-      components: [/* ... */],
-    },
-    results: {
-      title: "Your Results",
-      hooks: {
-        on_enter: (ctx) => {
-          const s = ctx.quiz_scores;
-          const correct = s?.total || 0;
-          const total = s?.max || 0;
-          ctx.setComponentProp("score-display", "text", `You scored ${correct} / ${total}`);
-        },
-      },
-      components: [/* ... */],
-    },
-  },
-} satisfies CatalogSchema;
+// Update display based on quiz scores on the results page
+kit.on('pageenter:results', (e) => {
+  const fields = kit.getAllFields();
+  kit.setComponentProp("score-display", "text", 'You scored ' + fields.correct + ' / ' + fields.total);
+});
 ```
 
-**Important:** The API validates hook syntax at write time. Malformed hooks are rejected with a clear error — they will never silently fail for visitors.
+See the **CatalogKit Global API** section below for the full API reference, event types, and scoping patterns.
 
 ---
 
 ## CatalogKit Global API (`window.CatalogKit`)
 
-A live JavaScript bridge exposed on `window.CatalogKit` that gives any plain JavaScript — inline `<script>` tags in `html` components, external scripts, or browser console — full read/write access to the catalog runtime. This is the recommended way to build custom interactive UI beyond what the declarative schema provides.
+A live JavaScript bridge exposed on `window.CatalogKit` that gives any plain JavaScript — inline `<script>` tags in `html` components, external scripts, or browser console — full read/write access to the catalog runtime. This is **the recommended way** to build custom logic, server-side validation, conditional UI, and interactive widgets.
 
 ### Accessing an instance
 
@@ -1667,20 +1634,59 @@ const kit = window.CatalogKit['cat_abc'];       // direct access by ID
 | `kit.setButtonDisabled(bool)` | Enable/disable the Continue button |
 | `kit.setValidationError(id, msg)` | Show a custom error on a field (`null` to clear) |
 | **Navigation** | |
-| `kit.goNext()` | Advance to next page (runs validation + hooks) |
+| `kit.goNext()` | Advance to next page (runs validation + event listeners) |
 | `kit.goBack()` | Go to previous page |
 | **Component props** | |
 | `kit.setComponentProp(id, prop, value)` | Override any component prop at runtime (e.g. `hidden`, `label`, `options`) |
 | **Events** | |
-| `kit.on(event, callback)` | Subscribe to `'fieldchange'` or `'pagechange'` |
+| `kit.on(event, callback)` | Subscribe to lifecycle events (see Events section below) |
 | `kit.off(event, callback)` | Unsubscribe |
 | **Utilities** | |
 | `kit.fetch` | Alias for `globalThis.fetch` |
 
-### Event payloads
+### Events
 
-- `fieldchange`: `{ fieldId: string, value: any }` — fires for each field that changed
-- `pagechange`: `{ pageId: string }` — fires after page transition
+Events follow the pattern `event` or `event:scope_id`. Unscoped listeners fire for all pages/fields. Scoped listeners fire only for the specified page or field.
+
+| Event | Scope | Payload | Async? | Description |
+|-------|-------|---------|--------|-------------|
+| `fieldchange` | field ID | `{ fieldId, value, prevValue }` | No | A form field value changed |
+| `pageenter` | page ID | `{ pageId }` | No | Page became active (after transition) |
+| `pageexit` | page ID | `{ pageId }` | Yes | About to leave page (after beforenext) |
+| `beforenext` | page ID | `{ pageId, preventDefault(), setNextPage(id) }` | Yes | After validation, before navigation — can block or redirect |
+| `submit` | page ID | `{ pageId, formState, preventDefault() }` | Yes | Final page submission — can block |
+
+**Scoping examples:**
+
+```javascript
+const kit = window.CatalogKit.get();
+
+// Global — fires on every page
+kit.on('beforenext', async (e) => { ... });
+
+// Scoped — fires only on 'checkout' page
+kit.on('beforenext:checkout', async (e) => { ... });
+
+// Global — fires for any field
+kit.on('fieldchange', (e) => { ... });
+
+// Scoped — fires only when 'email' field changes
+kit.on('fieldchange:email', (e) => { ... });
+
+// Page-specific enter/exit
+kit.on('pageenter:pricing', (e) => { ... });
+kit.on('pageexit:checkout', (e) => { ... });
+```
+
+**DOM events:** For standard DOM events like `blur`, `focus`, `click`, `input`, `keydown` — use the DOM directly. CatalogKit only handles lifecycle events that have no DOM equivalent (page transitions and form state changes are managed by React internally).
+
+```javascript
+// DOM events — use the DOM directly
+document.getElementById('email').addEventListener('blur', () => {
+  const kit = window.CatalogKit.get();
+  // validate on blur...
+});
+```
 
 ### Using with `html` components
 
@@ -1691,10 +1697,164 @@ const kit = window.CatalogKit['cat_abc'];       // direct access by ID
 
 ```json
 {
+  "id": "my_script",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n// your code here\n</script>"
+  }
+}
+```
+
+### Cookbook: common patterns
+
+The following examples show real-world patterns using `html` components with inline `<script>` tags. Place these components on the relevant page in your catalog schema.
+
+#### 1. Server-side form validation (beforenext + loading state)
+
+Validate form data against your backend before allowing navigation. Shows a loading spinner on the Continue button and inline validation errors.
+
+```json
+{
+  "id": "checkout_validator",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('beforenext:checkout', async (e) => {\n  kit.setButtonLoading(true);\n\n  try {\n    const res = await fetch('https://api.myapp.com/validate-order', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        email: kit.getField('email'),\n        quantity: kit.getField('quantity'),\n      }),\n    });\n    const data = await res.json();\n\n    if (!data.ok) {\n      kit.setValidationError('email', data.error || 'Validation failed');\n      e.preventDefault();\n    }\n  } catch (err) {\n    kit.setValidationError('email', 'Network error — please try again');\n    e.preventDefault();\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
+  }
+}
+```
+
+#### 2. Dynamic content loading on page enter
+
+Fetch data from your backend when a page loads and populate dropdown options dynamically.
+
+```json
+{
+  "id": "plan_loader",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:select_plan', async () => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://api.myapp.com/plans');\n    const plans = await res.json();\n    kit.setComponentProp('plan_dropdown', 'options',\n      plans.map(p => ({ value: p.id, label: `${p.name} — $${p.price}/mo` }))\n    );\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
+  }
+}
+```
+
+#### 3. Conditional UI based on field value
+
+Show or hide components based on user selections without server calls.
+
+```json
+{
+  "id": "conditional_ui",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('fieldchange:account_type', (e) => {\n  const isBusiness = e.value === 'business';\n  kit.setComponentProp('company_name', 'hidden', !isBusiness);\n  kit.setComponentProp('tax_id', 'hidden', !isBusiness);\n  kit.setComponentProp('company_name', 'required', isBusiness);\n});\n</script>"
+  }
+}
+```
+
+#### 4. Real-time email validation on blur (DOM event + CatalogKit)
+
+Use native DOM events for blur/focus and CatalogKit for state reads and error display.
+
+```json
+{
+  "id": "email_validator",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\n// Wait for DOM to render the email input\nsetTimeout(() => {\n  const el = document.querySelector('[data-component-id=\"email\"] input');\n  if (!el) return;\n\n  el.addEventListener('blur', async () => {\n    const email = kit.getField('email');\n    if (!email) return;\n\n    const res = await fetch(`https://api.myapp.com/check-email?email=${encodeURIComponent(email)}`);\n    const data = await res.json();\n\n    if (data.taken) {\n      kit.setValidationError('email', 'This email is already registered');\n    } else {\n      kit.setValidationError('email', null);\n    }\n  });\n}, 100);\n</script>"
+  }
+}
+```
+
+#### 5. Dynamic routing based on API response
+
+After server validation, route users to different pages based on the API response.
+
+```json
+{
+  "id": "smart_router",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('beforenext:qualification', async (e) => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://api.myapp.com/qualify', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        revenue: kit.getField('annual_revenue'),\n        employees: kit.getField('team_size'),\n      }),\n    });\n    const { tier } = await res.json();\n    kit.setGlobal('qualified_tier', tier);\n\n    if (tier === 'enterprise') {\n      e.setNextPage('enterprise_onboarding');\n    } else if (tier === 'disqualified') {\n      kit.setValidationError('annual_revenue', 'We currently only serve businesses with $100k+ revenue');\n      e.preventDefault();\n    }\n    // else: continue to default next page\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
+  }
+}
+```
+
+#### 6. Timed actions — auto-advance, countdowns, delayed UI
+
+Use `setTimeout`/`setInterval` combined with CatalogKit events for time-based logic.
+
+```json
+{
+  "id": "auto_advance_timer",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\n// Auto-advance after 10 seconds on the 'intro' page\nkit.on('pageenter:intro', () => {\n  const timer = setTimeout(() => {\n    kit.goNext();\n  }, 10000);\n\n  // Clean up if user leaves manually\n  kit.on('pageexit:intro', () => clearTimeout(timer));\n});\n</script>"
+  }
+}
+```
+
+```json
+{
+  "id": "countdown_display",
+  "type": "html",
+  "props": {
+    "content": "<div id=\"countdown\" style=\"text-align:center;font-size:24px;font-weight:bold;\"></div>\n<script>\nconst kit = window.CatalogKit.get();\nlet seconds = 30;\nconst el = document.getElementById('countdown');\nconst interval = setInterval(() => {\n  seconds--;\n  el.textContent = `Offer expires in ${seconds}s`;\n  if (seconds <= 0) {\n    clearInterval(interval);\n    kit.goNext(); // auto-advance when timer expires\n  }\n}, 1000);\nel.textContent = `Offer expires in ${seconds}s`;\n\nkit.on('pageexit:' + kit.getPageId(), () => clearInterval(interval));\n</script>"
+  }
+}
+```
+
+#### 7. Disable Continue until a condition is met
+
+Keep the button disabled until the user completes a specific action, then enable it.
+
+```json
+{
+  "id": "gate_logic",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\n// Disable Continue until terms are accepted AND email is filled\nkit.setButtonDisabled(true);\n\nfunction checkReady() {\n  const termsAccepted = kit.getField('accept_terms') === true;\n  const hasEmail = !!kit.getField('email');\n  kit.setButtonDisabled(!(termsAccepted && hasEmail));\n}\n\nkit.on('fieldchange:accept_terms', checkReady);\nkit.on('fieldchange:email', checkReady);\ncheckReady();\n</script>"
+  }
+}
+```
+
+#### 8. Submit interception — send data to your backend before completion
+
+Intercept the final submission to send data to your own backend, and block submission if it fails.
+
+```json
+{
+  "id": "submit_handler",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('submit', async (e) => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://api.myapp.com/submissions', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify(e.formState),\n    });\n    if (!res.ok) {\n      kit.setValidationError('email', 'Failed to save — please try again');\n      e.preventDefault();\n    }\n  } catch (err) {\n    kit.setValidationError('email', 'Network error');\n    e.preventDefault();\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
+  }
+}
+```
+
+#### 9. Live price calculator with reactive DOM
+
+Combine `fieldchange` events with direct DOM manipulation for interactive widgets.
+
+```json
+{
   "id": "price_calc",
   "type": "html",
   "props": {
-    "content": "<div id=\"price\">$0</div>\n<script>\nconst kit = window.CatalogKit.get();\nfunction update() {\n  const qty = Number(kit.getField('quantity')) || 0;\n  const tier = kit.getField('tier') || 'basic';\n  const rate = tier === 'pro' ? 49 : 29;\n  document.getElementById('price').textContent = '$' + (qty * rate);\n}\nupdate();\nkit.on('fieldchange', update);\n</script>"
+    "content": "<div style=\"background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;text-align:center;\">\n  <div style=\"font-size:14px;color:#666;\">Your estimated price</div>\n  <div id=\"price\" style=\"font-size:36px;font-weight:bold;color:#16a34a;\">$0</div>\n  <div id=\"price-breakdown\" style=\"font-size:12px;color:#999;\"></div>\n</div>\n<script>\nconst kit = window.CatalogKit.get();\n\nfunction update() {\n  const qty = Number(kit.getField('quantity')) || 0;\n  const tier = kit.getField('tier') || 'basic';\n  const rates = { basic: 29, pro: 49, enterprise: 99 };\n  const rate = rates[tier] || 29;\n  const total = qty * rate;\n  document.getElementById('price').textContent = '$' + total.toLocaleString();\n  document.getElementById('price-breakdown').textContent = `${qty} x $${rate}/mo (${tier})`;\n}\n\nupdate();\nkit.on('fieldchange:quantity', update);\nkit.on('fieldchange:tier', update);\n</script>"
+  }
+}
+```
+
+#### 10. Conditional page skip based on external data
+
+Decide at page-enter time whether to skip a page entirely.
+
+```json
+{
+  "id": "skip_checker",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:address_page', async () => {\n  // If we already have this user's address from a previous session, skip\n  const userId = kit.getUrlParam('uid');\n  if (!userId) return;\n\n  const res = await fetch(`https://api.myapp.com/users/${userId}/address`);\n  const data = await res.json();\n  if (data.address) {\n    kit.setField('address', data.address);\n    kit.goNext(); // immediately skip past this page\n  }\n});\n</script>"
   }
 }
 ```
@@ -1702,22 +1862,15 @@ const kit = window.CatalogKit['cat_abc'];       // direct access by ID
 ### Best practices
 
 - **Always use `window.CatalogKit.get()`** — not a raw global. This is future-proof and works in multi-form pages.
-- **Clean up listeners** when appropriate — use `kit.off()` if your script runs on multiple page renders.
-- **Use `setButtonLoading(true)`** before async operations (API calls, validation) and `setButtonLoading(false)` after.
+- **Clean up listeners** when appropriate — use `kit.off()` or scope cleanup to `pageexit` to avoid stale listeners.
+- **Use `setButtonLoading(true)`** before async operations and `setButtonLoading(false)` in a `finally` block.
 - **Prefer `setValidationError`** over custom error DOM — it integrates with the native validation system and auto-scrolls.
 - **Use `setComponentProp(id, 'hidden', true/false)`** for conditional UI — it respects the existing visibility system.
+- **Use scoped events** (`beforenext:page_id`) instead of global events with `if` checks inside the callback.
+- **For DOM events** (blur, focus, click, input) use the DOM directly — don't wait for CatalogKit to add them.
+- **Use `setTimeout` with `pageenter`/`pageexit`** for timed logic — always clean up timers on exit.
 - Scripts execute in a try/catch — errors are logged to console but never crash the catalog renderer.
-
-### Hooks vs CatalogKit API — when to use which
-
-| Scenario | Use |
-|----------|-----|
-| React to field changes, set vars, conditional routing | **Hooks** (`on_change`, `on_before_next`) |
-| Custom interactive UI (calculators, charts, widgets) | **CatalogKit API** in `html` component |
-| Async validation with custom loading UI | **CatalogKit API** |
-| Simple display of field values | **Template interpolation** (`{{field_id}}`) |
-| One-time setup on page load | **Hooks** (`on_enter`) or CatalogKit API |
-| Cross-catalog orchestration from parent page | **CatalogKit API** with `get(catalog_id)` |
+- Async callbacks on `beforenext` and `submit` are fully awaited — you can safely `await fetch()` inside them.
 
 ---
 
