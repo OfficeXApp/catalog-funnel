@@ -1644,12 +1644,16 @@ A live JavaScript bridge exposed on `window.CatalogKit` that gives any plain Jav
 
 ### Accessing an instance
 
-Each catalog registers under its `catalog_id`. On pages with a single catalog, use the convenience getter:
+**IMPORTANT: Always call `.get()` first.** `window.CatalogKit` is a registry, not an instance — it only has `.get()`. All API methods (`on`, `off`, `getField`, `setField`, etc.) live on the instance returned by `.get()`.
 
 ```javascript
+// ✅ CORRECT — always use .get() to obtain an instance first
 const kit = window.CatalogKit.get();           // most recently mounted catalog
 const kit = window.CatalogKit.get('cat_abc');   // specific catalog by ID
-const kit = window.CatalogKit['cat_abc'];       // direct access by ID
+
+// ❌ WRONG — will throw "is not a function"
+window.CatalogKit.on('pageenter', ...);        // .on() does not exist on the registry
+window.CatalogKit.getField('email');           // .getField() does not exist on the registry
 ```
 
 **Multi-form isolation:** Multiple catalogs on the same page each register independently under their own `catalog_id`. They never bleed state into each other. Use `.get(id)` to target a specific one.
@@ -1904,7 +1908,7 @@ Decide at page-enter time whether to skip a page entirely.
 
 ### Best practices
 
-- **Always use `window.CatalogKit.get()`** — not a raw global. This is future-proof and works in multi-form pages.
+- **CRITICAL: Always call `window.CatalogKit.get()` first** to get an instance. `window.CatalogKit` is a registry object — it only has `.get()`. Calling `window.CatalogKit.on(...)` or `window.CatalogKit.getField(...)` directly will throw `"is not a function"`. The correct pattern is `const kit = window.CatalogKit.get(); kit.on(...)`. This is required for multi-catalog isolation.
 - **Clean up listeners** when appropriate — use `kit.off()` or scope cleanup to `pageexit` to avoid stale listeners.
 - **Use `setButtonLoading(true)`** before async operations and `setButtonLoading(false)` in a `finally` block.
 - **Prefer `setValidationError`** over custom error DOM — it integrates with the native validation system and auto-scrolls.
