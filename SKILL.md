@@ -1072,6 +1072,37 @@ When `reveal_on_select` is `true`, the flow is two-step:
 
 Works with both `multiple_choice` (single-select) and `checkboxes` (multi-select) components. Omit `reveal_on_select` or set to `false` for the default behavior (no inline feedback — use `reveal_answers` on a later page instead).
 
+### Reveal Answers (Results Page)
+
+Show a quiz results summary on any page by adding `reveal_answers` to the page config. This is the **recommended declarative approach** — no scripting needed:
+
+```json
+{
+  "results": {
+    "reveal_answers": {
+      "from_pages": ["quiz_page_1", "quiz_page_2"],
+      "show_score": true,
+      "show_correct": true,
+      "show_explanation": true
+    }
+  }
+}
+```
+
+This automatically renders a score summary (e.g. "7 / 10") and per-question breakdowns with correct/incorrect indicators, explanations, and wrong-answer messages.
+
+For **custom results UI** (e.g. dynamic headings, referral links with score), use `kit.getQuizScores()` in a script on the results page:
+
+```json
+{
+  "id": "results_script",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\nkit.on('pageenter:results', () => {\n  const s = kit.getQuizScores();\n  document.querySelector('#score').textContent = s.total + ' / ' + s.max;\n});\n</script>"
+  }
+}
+```
+
 ### Timeline
 
 Display a vertical timeline with alternating or single-side layout:
