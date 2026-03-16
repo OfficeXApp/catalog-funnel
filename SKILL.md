@@ -534,6 +534,17 @@ Set theme options under `settings.theme`:
 
 **Page features:** `payment`, `captcha`
 
+### Component-Level Visibility (all component types)
+
+Every component (display AND input) supports these top-level fields for controlling visibility:
+
+| Field | Type | Description |
+|---|---|---|
+| `hidden` | `boolean` | Statically hide the component — works on ALL types including display (`callout`, `image`, `banner`, etc.) |
+| `visibility` | `ConditionGroup` | Dynamically show/hide based on form state, URL params, or hints — works on ALL types |
+
+Use `hidden: true` for simple on/off. Use `visibility` for conditional logic. Both work on display and input components alike. Hidden components are excluded from validation.
+
 ### Shared Input Props
 
 All input components support these base props for labels, help text, and validation:
@@ -546,7 +557,7 @@ All input components support these base props for labels, help text, and validat
 | `tooltip` | `string` | Info icon (ⓘ) next to label — hover/tap shows explanatory popover |
 | `required` | `boolean` | Marks field as required (red asterisk) |
 | `placeholder` | `string` | Placeholder text inside the input |
-| `hidden` | `boolean` | Hides the field from the UI |
+| `hidden` | `boolean` | Hides the field from the UI (legacy — prefer component-level `hidden` instead) |
 
 Example with all label props:
 ```json
@@ -1732,7 +1743,7 @@ Fetch data from your backend when a page loads and populate dropdown options dyn
   "id": "plan_loader",
   "type": "html",
   "props": {
-    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:select_plan', async () => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://api.myapp.com/plans');\n    const plans = await res.json();\n    kit.setComponentProp('plan_dropdown', 'options',\n      plans.map(p => ({ value: p.id, label: `${p.name} — $${p.price}/mo` }))\n    );\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:select_plan', async () => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://api.myapp.com/plans');\n    const plans = await res.json();\n    kit.setComponentProp('plan_dropdown', 'options',\n      plans.map(p => ({ value: p.id, label: p.name + ' — ' + p.price + '/mo' }))\n    );\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
   }
 }
 ```
@@ -1760,7 +1771,7 @@ Use native DOM events for blur/focus and CatalogKit for state reads and error di
   "id": "email_validator",
   "type": "html",
   "props": {
-    "content": "<script>\nconst kit = window.CatalogKit.get();\n\n// Wait for DOM to render the email input\nsetTimeout(() => {\n  const el = document.querySelector('[data-component-id=\"email\"] input');\n  if (!el) return;\n\n  el.addEventListener('blur', async () => {\n    const email = kit.getField('email');\n    if (!email) return;\n\n    const res = await fetch(`https://api.myapp.com/check-email?email=${encodeURIComponent(email)}`);\n    const data = await res.json();\n\n    if (data.taken) {\n      kit.setValidationError('email', 'This email is already registered');\n    } else {\n      kit.setValidationError('email', null);\n    }\n  });\n}, 100);\n</script>"
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\n// Wait for DOM to render the email input\nsetTimeout(() => {\n  const el = document.querySelector('[data-component-id=\"email\"] input');\n  if (!el) return;\n\n  el.addEventListener('blur', async () => {\n    const email = kit.getField('email');\n    if (!email) return;\n\n    const res = await fetch('https://api.myapp.com/check-email?email=' + encodeURIComponent(email));\n    const data = await res.json();\n\n    if (data.taken) {\n      kit.setValidationError('email', 'This email is already registered');\n    } else {\n      kit.setValidationError('email', null);\n    }\n  });\n}, 100);\n</script>"
   }
 }
 ```
@@ -1798,7 +1809,7 @@ Use `setTimeout`/`setInterval` combined with CatalogKit events for time-based lo
   "id": "countdown_display",
   "type": "html",
   "props": {
-    "content": "<div id=\"countdown\" style=\"text-align:center;font-size:24px;font-weight:bold;\"></div>\n<script>\nconst kit = window.CatalogKit.get();\nlet seconds = 30;\nconst el = document.getElementById('countdown');\nconst interval = setInterval(() => {\n  seconds--;\n  el.textContent = `Offer expires in ${seconds}s`;\n  if (seconds <= 0) {\n    clearInterval(interval);\n    kit.goNext(); // auto-advance when timer expires\n  }\n}, 1000);\nel.textContent = `Offer expires in ${seconds}s`;\n\nkit.on('pageexit:' + kit.getPageId(), () => clearInterval(interval));\n</script>"
+    "content": "<div id=\"countdown\" style=\"text-align:center;font-size:24px;font-weight:bold;\"></div>\n<script>\nconst kit = window.CatalogKit.get();\nlet seconds = 30;\nconst el = document.getElementById('countdown');\nconst interval = setInterval(() => {\n  seconds--;\n  el.textContent = 'Offer expires in ' + seconds + 's';\n  if (seconds <= 0) {\n    clearInterval(interval);\n    kit.goNext(); // auto-advance when timer expires\n  }\n}, 1000);\nel.textContent = 'Offer expires in ' + seconds + 's';\n\nkit.on('pageexit:' + kit.getPageId(), () => clearInterval(interval));\n</script>"
   }
 }
 ```
@@ -1840,7 +1851,7 @@ Combine `fieldchange` events with direct DOM manipulation for interactive widget
   "id": "price_calc",
   "type": "html",
   "props": {
-    "content": "<div style=\"background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;text-align:center;\">\n  <div style=\"font-size:14px;color:#666;\">Your estimated price</div>\n  <div id=\"price\" style=\"font-size:36px;font-weight:bold;color:#16a34a;\">$0</div>\n  <div id=\"price-breakdown\" style=\"font-size:12px;color:#999;\"></div>\n</div>\n<script>\nconst kit = window.CatalogKit.get();\n\nfunction update() {\n  const qty = Number(kit.getField('quantity')) || 0;\n  const tier = kit.getField('tier') || 'basic';\n  const rates = { basic: 29, pro: 49, enterprise: 99 };\n  const rate = rates[tier] || 29;\n  const total = qty * rate;\n  document.getElementById('price').textContent = '$' + total.toLocaleString();\n  document.getElementById('price-breakdown').textContent = `${qty} x $${rate}/mo (${tier})`;\n}\n\nupdate();\nkit.on('fieldchange:quantity', update);\nkit.on('fieldchange:tier', update);\n</script>"
+    "content": "<div style=\"background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:20px;text-align:center;\">\n  <div style=\"font-size:14px;color:#666;\">Your estimated price</div>\n  <div id=\"price\" style=\"font-size:36px;font-weight:bold;color:#16a34a;\">$0</div>\n  <div id=\"price-breakdown\" style=\"font-size:12px;color:#999;\"></div>\n</div>\n<script>\nconst kit = window.CatalogKit.get();\n\nfunction update() {\n  const qty = Number(kit.getField('quantity')) || 0;\n  const tier = kit.getField('tier') || 'basic';\n  const rates = { basic: 29, pro: 49, enterprise: 99 };\n  const rate = rates[tier] || 29;\n  const total = qty * rate;\n  document.getElementById('price').textContent = '$' + total.toLocaleString();\n  document.getElementById('price-breakdown').textContent = qty + ' x $' + rate + '/mo (' + tier + ')';\n}\n\nupdate();\nkit.on('fieldchange:quantity', update);\nkit.on('fieldchange:tier', update);\n</script>"
   }
 }
 ```
@@ -1854,7 +1865,7 @@ Decide at page-enter time whether to skip a page entirely.
   "id": "skip_checker",
   "type": "html",
   "props": {
-    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:address_page', async () => {\n  // If we already have this user's address from a previous session, skip\n  const userId = kit.getUrlParam('uid');\n  if (!userId) return;\n\n  const res = await fetch(`https://api.myapp.com/users/${userId}/address`);\n  const data = await res.json();\n  if (data.address) {\n    kit.setField('address', data.address);\n    kit.goNext(); // immediately skip past this page\n  }\n});\n</script>"
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:address_page', async () => {\n  // If we already have this user's address from a previous session, skip\n  const userId = kit.getUrlParam('uid');\n  if (!userId) return;\n\n  const res = await fetch('https://api.myapp.com/users/' + userId + '/address');\n  const data = await res.json();\n  if (data.address) {\n    kit.setField('address', data.address);\n    kit.goNext(); // immediately skip past this page\n  }\n});\n</script>"
   }
 }
 ```
