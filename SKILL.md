@@ -453,6 +453,73 @@ Set theme options under `settings.theme`:
 
 **Page features:** `payment`, `captcha`
 
+### Heading Component
+
+The `heading` display component supports three text levels:
+
+```json
+{
+  "id": "hero",
+  "type": "heading",
+  "props": {
+    "micro_heading": "Welcome to the program",
+    "text": "Heading Title",
+    "subtitle": "Supporting text below the heading",
+    "level": 1,
+    "align": "left"
+  }
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `text` | string | *(required)* | Main heading text |
+| `level` | 1–6 | `1` | HTML heading level (h1–h6), controls size |
+| `micro_heading` | string | — | Small uppercase eyebrow text above the heading |
+| `subtitle` | string | — | Supporting text below the heading |
+| `align` | `"left"` / `"center"` / `"right"` | `"left"` | Text alignment |
+
+Stack all three for a complete heading block: micro heading (small, uppercase), main heading (bold), and subtitle (lighter).
+
+### Page Actions & CTA Buttons
+
+Page action buttons (and the default submit/continue button) support `side_statement` and `reassurance` text to increase conversion:
+
+**On page actions:**
+
+```json
+{
+  "actions": [
+    {
+      "id": "cta",
+      "label": "Get Started Now",
+      "style": "primary",
+      "side_statement": "No credit card required",
+      "reassurance": "Cancel anytime. 30-day money back guarantee."
+    }
+  ]
+}
+```
+
+**On the default submit button:**
+
+```json
+{
+  "title": "Your Details",
+  "submit_label": "Continue",
+  "submit_side_statement": "Takes only 2 minutes",
+  "submit_reassurance": "Your information is secure and never shared.",
+  "components": [...]
+}
+```
+
+| Property | Type | Description |
+|---|---|---|
+| `side_statement` | string | Text shown inline to the right of the button |
+| `reassurance` | string | Small muted text shown below the button |
+| `submit_side_statement` | string | Same as `side_statement` but for the default submit button (page-level) |
+| `submit_reassurance` | string | Same as `reassurance` but for the default submit button (page-level) |
+
 ### Embedded Buttons
 
 Add inline buttons to `multiple_choice`, `checkboxes`, and `timeline` components. Buttons render alongside each option or timeline item — useful for "check the box after opening this link" patterns.
@@ -737,6 +804,224 @@ Display a vertical timeline with alternating or single-side layout:
 **Variants:** `"default"` (all items on the right), `"alternating"` (items alternate left/right on desktop, stack on mobile).
 
 Each item supports: `title` (required), `description` (optional, markdown), `icon` (emoji in colored circle), `image` (URL for a round image), `color` (per-item color, falls back to theme), `button` (embedded button, see [Embedded Buttons](#embedded-buttons)), `checkbox` (`true` or `{ "label": "Custom" }` for an interactive checkbox).
+
+### File Upload
+
+Upload single or multiple files with drag-and-drop. Supports file type filtering, size limits, and multi-file mode.
+
+```json
+{
+  "id": "resume",
+  "type": "file_upload",
+  "props": {
+    "label": "Upload your resume",
+    "accept": ".pdf,.doc,.docx",
+    "max_size_mb": 10,
+    "required": true
+  }
+}
+```
+
+Multi-file example:
+
+```json
+{
+  "id": "portfolio",
+  "type": "file_upload",
+  "props": {
+    "label": "Upload portfolio images",
+    "multiple": true,
+    "accept": "image/*",
+    "max_files": 5,
+    "max_size_mb": 10
+  }
+}
+```
+
+**Properties:** `multiple` (boolean, default false), `accept` (string, e.g. `"image/*,.pdf"`), `max_files` (number, default 10), `max_size_mb` (number, default 25).
+
+### Signature
+
+Canvas-based drawing pad for capturing signatures. Value is stored as a base64 PNG data URL. Includes a Clear button to reset.
+
+```json
+{
+  "id": "consent_signature",
+  "type": "signature",
+  "props": {
+    "label": "Sign below to confirm",
+    "required": true
+  }
+}
+```
+
+### Wallet Address Inputs
+
+Three validated wallet address input types with inline validation:
+
+- `evm_address` — Ethereum/EVM address (0x + 40 hex chars)
+- `solana_address` — Solana address (32-44 base58 chars)
+- `bitcoin_address` — Bitcoin address (Legacy, P2SH, Bech32, Taproot)
+
+```json
+{
+  "id": "eth_wallet",
+  "type": "evm_address",
+  "props": { "label": "Your ETH Wallet", "required": true }
+}
+```
+
+```json
+{
+  "id": "sol_wallet",
+  "type": "solana_address",
+  "props": { "label": "Solana Wallet" }
+}
+```
+
+```json
+{
+  "id": "btc_wallet",
+  "type": "bitcoin_address",
+  "props": { "label": "Bitcoin Address" }
+}
+```
+
+All three render as monospace text inputs with real-time format validation and visual feedback (green check / red X).
+
+### Testimonial Sizes & Links
+
+The `testimonial` component supports `size` variants for different layout densities:
+
+```json
+{
+  "id": "review",
+  "type": "testimonial",
+  "props": {
+    "text": "This changed everything for our team.",
+    "author": "Jane Smith",
+    "subtitle": "CEO at Acme Inc.",
+    "avatar": "https://example.com/jane.jpg",
+    "rating": 5,
+    "link": "https://twitter.com/janesmith",
+    "variant": "card",
+    "size": "medium"
+  }
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `text` | string | *(required)* | Quote text |
+| `author` | string | *(required)* | Author name |
+| `subtitle` | string | — | Role, company, or subtitle text (alias: `role`) |
+| `avatar` | string | — | Profile picture URL |
+| `rating` | number (1-5) | — | Star rating |
+| `link` | string | — | Author name becomes a clickable link |
+| `variant` | `"card"` / `"quote"` / `"minimal"` | `"card"` | Layout style |
+| `size` | `"compact"` / `"medium"` / `"large"` | `"medium"` | Controls padding, text size, and avatar size |
+
+### Callout
+
+Highlighted callout boxes for tips, warnings, notes, and other important information. Supports 6 preset styles and an optional collapsible mode.
+
+```json
+{
+  "id": "important",
+  "type": "callout",
+  "props": {
+    "style": "warning",
+    "title": "Important Notice",
+    "text": "Complete all steps within 48 hours to keep your spot."
+  }
+}
+```
+
+Collapsible callout:
+
+```json
+{
+  "id": "faq-note",
+  "type": "callout",
+  "props": {
+    "style": "tip",
+    "title": "Pro Tip",
+    "text": "You can use **markdown** in the body text.",
+    "collapsible": true
+  }
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `style` | `"info"` / `"tip"` / `"warning"` / `"danger"` / `"note"` / `"success"` | `"info"` | Visual preset (color + default icon) |
+| `title` | string | — | Bold heading text |
+| `text` | string | — | Body text (supports markdown) |
+| `icon` | string | — | Override the default icon (emoji) |
+| `collapsible` | boolean | `false` | Renders as expandable/collapsible (requires `title`) |
+
+### Nested Inputs in Timeline
+
+Timeline items support an `inputs` array for embedding input fields inside timeline cards. Nested inputs render in an indented left-bordered panel. Values are stored with compound IDs: `timelineComponentId.inputId`.
+
+```json
+{
+  "id": "onboarding",
+  "type": "timeline",
+  "props": {
+    "items": [
+      {
+        "title": "Set Your Availability",
+        "description": "Choose when you're free to take calls.",
+        "icon": "📅",
+        "inputs": [
+          { "id": "timezone", "type": "dropdown", "label": "Timezone", "props": { "options": ["EST", "CST", "PST"] } },
+          { "id": "hours", "type": "short_text", "label": "Available hours", "placeholder": "e.g. 9am-5pm" }
+        ]
+      },
+      {
+        "title": "Upload ID",
+        "description": "We need a photo ID for verification.",
+        "icon": "🪪",
+        "inputs": [
+          { "id": "id_photo", "type": "file_upload", "label": "Photo ID", "props": { "accept": "image/*" } }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Nested Inputs in Checkboxes
+
+Checkbox options support an `inputs` array. When a checkbox option is selected, nested inputs slide in below it in an indented left-bordered panel. Values are stored with compound IDs: `checkboxComponentId.optionValue.inputId`.
+
+```json
+{
+  "id": "interests",
+  "type": "checkboxes",
+  "props": {
+    "label": "What are you interested in?",
+    "options": [
+      {
+        "value": "coaching",
+        "label": "1-on-1 Coaching",
+        "inputs": [
+          { "id": "coach_pref", "type": "short_text", "label": "Preferred coach name", "placeholder": "Optional" }
+        ]
+      },
+      {
+        "value": "group",
+        "label": "Group Sessions",
+        "inputs": [
+          { "id": "group_size", "type": "dropdown", "label": "Preferred group size", "props": { "options": ["Small (3-5)", "Medium (6-10)", "Large (10+)"] } }
+        ]
+      },
+      { "value": "self_paced", "label": "Self-Paced Learning" }
+    ]
+  }
+}
+```
 
 ### Progress Line
 
