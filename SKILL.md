@@ -482,6 +482,18 @@ Example with all label props:
 }
 ```
 
+### Other Option (free-text "Other, please specify")
+
+Choice components (`multiple_choice`, `checkboxes`, `dropdown`) support an optional "Other" entry that lets visitors type a custom answer.
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `other_option` | `boolean` | `false` | Appends an "Other" choice. Selecting it reveals a text input. |
+| `other_label` | `string` | `"Other"` | Custom label for the "Other" button. |
+| `other_placeholder` | `string` | — | Placeholder for the free-text input. |
+
+Value is stored as `__other__:<text>`. **Do not set `other_option: true` unless you intentionally want a free-text fallback** — otherwise an unexpected textarea will render.
+
 ### Heading Component
 
 The `heading` display component supports three text levels:
