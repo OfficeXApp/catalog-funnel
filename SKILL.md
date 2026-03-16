@@ -1636,6 +1636,7 @@ const kit = window.CatalogKit['cat_abc'];       // direct access by ID
 | `kit.getAllUrlParams()` | Frozen copy of all URL params |
 | `kit.getPageId()` | Current page ID |
 | `kit.getGlobal(key)` | Get a global (cross-page) value |
+| `kit.getQuizScores()` | Get quiz scores: `{ total, max, percent, correct_count, question_count, answers[] }`. Each answer includes `{ component_id, page_id, label, options, given_answer, correct_answer, is_correct, points_earned, points_possible, explanation, wrong_message }` |
 | **Write state** | |
 | `kit.setField(id, value)` | Set a field value — immediately reflects on screen |
 | `kit.setVar(key, value)` | Set a script variable |
@@ -1882,6 +1883,18 @@ Decide at page-enter time whether to skip a page entirely.
 - **Use `setTimeout` with `pageenter`/`pageexit`** for timed logic — always clean up timers on exit.
 - Scripts execute in a try/catch — errors are logged to console but never crash the catalog renderer.
 - Async callbacks on `beforenext` and `submit` are fully awaited — you can safely `await fetch()` inside them.
+- **Use `kit.getQuizScores()`** on results pages to access scores with full context (question labels, options, answers, explanations).
+
+### Debug mode
+
+Append `?debug_mode=verbose` or `?debug_mode=slim` to any catalog URL for console logging.
+
+| Mode | What it logs |
+|---|---|
+| `slim` | CatalogKit registration, script execution, pageenter events, quiz score updates |
+| `verbose` | All of slim + full formState at page transitions, quiz answer details, listener counts, fieldchange events |
+
+Example: `https://yoursubdomain.catalogkit.cc/your-catalog?debug_mode=verbose`
 
 ---
 
