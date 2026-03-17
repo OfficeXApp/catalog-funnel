@@ -720,6 +720,7 @@ All input components support these base props for labels, help text, and validat
 | `required` | `boolean` | Marks field as required (red asterisk) |
 | `placeholder` | `string` | Placeholder text inside the input |
 | `hidden` | `boolean` | Hides the field from the UI (legacy — prefer component-level `hidden` instead) |
+| `copyable` | `boolean` | Show a copy-to-clipboard icon next to the input. Works on editable inputs (short_text, long_text, email, phone, url, number, currency, date, datetime, time, password, dropdown, address). The icon appears once the field has a value. |
 
 Example with all label props:
 ```json
@@ -732,6 +733,43 @@ Example with all label props:
     "tooltip": "Go to Telegram Settings > Username to find or set yours",
     "placeholder": "@username",
     "required": true
+  }
+}
+```
+
+#### Text Input Props (`short_text` & `long_text`)
+
+Both `short_text` (single-line) and `long_text` (multi-line textarea) share these additional props on top of the shared input props above:
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `min_length` | `number` | — | Minimum character count |
+| `max_length` | `number` | — | Maximum character count |
+| `default_value` | `string` | — | Pre-filled default value |
+| `disabled` | `boolean` | `false` | Greys out the input, not interactive |
+| `readonly` | `boolean` | `false` | Read-only with copy-to-clipboard button |
+
+**`long_text`-only props (textarea):**
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `rows` | `number` | `4` | Number of visible text rows (controls initial height) |
+| `resize` | `string` | `"vertical"` | Whether the textarea is draggable to resize. Options: `"vertical"`, `"horizontal"`, `"both"`, `"none"` |
+
+Example — a feedback textarea with 6 rows, no resize:
+```json
+{
+  "id": "feedback",
+  "type": "long_text",
+  "props": {
+    "label": "Your Feedback",
+    "sublabel": "Tell us what you think",
+    "tooltip": "Be as detailed as you like",
+    "placeholder": "Write your thoughts here...",
+    "required": true,
+    "rows": 6,
+    "resize": "none",
+    "max_length": 2000
   }
 }
 ```
@@ -961,6 +999,20 @@ Input components support a `prefill_mode` property that controls how prefilled v
 ```
 
 To prefill values, pass them as URL parameters matching the component ID: `?referral_code=ABC123`. The readonly input renders with a clipboard icon — clicking it copies the value and shows a brief checkmark confirmation.
+
+#### Copyable (editable inputs with copy icon)
+
+For inputs that should remain **editable** but also let the user easily copy the value, use `copyable: true` in props:
+
+```json
+{
+  "id": "generated_link",
+  "type": "url",
+  "props": { "label": "Your Share Link", "copyable": true }
+}
+```
+
+The copy icon appears next to the input once it has a value. Clicking it copies the current value to clipboard with a checkmark confirmation. Unlike `readonly`, the field remains fully editable. Supported on: `short_text`, `long_text`, `email`, `phone`, `url`, `number`, `currency`, `date`, `datetime`, `time`, `password`, `dropdown`, `address`.
 
 ### Auto-Skip Pages
 
@@ -1501,6 +1553,8 @@ The iframe URL re-resolves reactively — when a visitor fills in `comp_email`, 
 
 A button that opens a scrollable modal dialog. Perfect for terms & conditions, privacy policies, detailed product info, or any content that would clutter the page. The body supports markdown-style formatting (bold, italic, links, lists).
 
+**Basic modal (static content only):**
+
 ```json
 {
   "id": "terms_modal",
@@ -1515,6 +1569,33 @@ A button that opens a scrollable modal dialog. Perfect for terms & conditions, p
 }
 ```
 
+**Modal with embedded inputs (read & sign pattern):**
+
+Modals can embed input and display components inside the body. Use `confirm_sets_field` to auto-set a form field value when the user confirms (e.g. auto-check a checkbox after signing). Use `require_inputs` to disable the confirm button until all required embedded inputs are filled.
+
+```json
+{
+  "id": "agreement_modal",
+  "type": "modal",
+  "props": {
+    "button_label": "Read & Sign Agreement",
+    "button_style": "outline",
+    "title": "Service Agreement",
+    "body": "Please read the following terms carefully and sign below to confirm your acceptance.",
+    "components": [
+      { "id": "agreement_text", "type": "paragraph", "props": { "text": "By signing below you agree to all terms and conditions..." } },
+      { "id": "sig", "type": "signature", "label": "Your Signature", "required": true },
+      { "id": "typed_name", "type": "short_text", "label": "Type your full name", "required": true, "placeholder": "John Doe" }
+    ],
+    "confirm_label": "I Agree",
+    "confirm_sets_field": { "field_id": "terms_accepted", "value": true },
+    "require_inputs": true
+  }
+}
+```
+
+Embedded component values are stored with compound IDs: `modalComponentId.nestedInputId` (e.g. `agreement_modal.sig`, `agreement_modal.typed_name`).
+
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `button_label` | string | `"View"` | Text on the trigger button |
@@ -1522,8 +1603,12 @@ A button that opens a scrollable modal dialog. Perfect for terms & conditions, p
 | `title` | string | — | Header shown at the top of the modal |
 | `body` | string | `""` | Scrollable content (supports markdown-style bold, italic, links, lists) |
 | `max_width` | string | `"640px"` | Maximum width of the modal dialog |
+| `components` | array | — | Embedded input/display components rendered inside the modal body (same format as checkbox nested inputs) |
+| `confirm_label` | string | `"Confirm"` / `"Close"` | Footer button label. Defaults to "Confirm" when `components` present, "Close" otherwise |
+| `confirm_sets_field` | `{ field_id, value }` | — | On confirm, set this field to the given value (e.g. auto-check a checkbox) |
+| `require_inputs` | boolean | `false` | Disable confirm button until all required embedded inputs are filled |
 
-The modal closes by clicking the X button, pressing Escape, clicking the backdrop overlay, or the Close footer button.
+The modal closes by clicking the X button, pressing Escape, clicking the backdrop overlay, or the footer button. When `components` are present, a Cancel button appears alongside the confirm button.
 
 ### Custom React Component
 
@@ -1694,9 +1779,11 @@ Each item in the `inputs` array has these fields:
 | `label` | string | Display label above the input |
 | `placeholder` | string | Placeholder text |
 | `required` | boolean | Mark this nested input as required. Can be set here OR inside `props.required` — both are supported. |
-| `props` | object | Additional props passed to the input component (e.g. `{ "required": true, "sublabel": "..." }`) |
+| `props` | object | Additional props passed to the input component (e.g. `{ "required": true, "sublabel": "...", "readonly": true }`) |
 
 > **Important for AI agents:** `required` can be placed at `input.required` (top-level) OR `input.props.required` (inside props). Both work identically. Example: `{ "id": "wallet", "type": "solana_address", "required": true }` is equivalent to `{ "id": "wallet", "type": "solana_address", "props": { "required": true } }`.
+
+> **Readonly & Copyable nested inputs:** Set `"readonly": true` inside `props` to render the nested input as a read-only field with a **copy-to-clipboard button** — ideal for pre-filled messages, codes, or links the user needs to copy. Set `"copyable": true` to keep the input editable but add a copy button alongside it. Supported types: `short_text`, `long_text`, `rich_text`, `email`, `phone`, `url`, `number`, `currency`, `date`, `datetime`, `time`, `password`, `dropdown`, `address`. Example: `{ "id": "msg", "type": "long_text", "label": "Message to send", "props": { "readonly": true } }`.
 
 **Option properties:**
 
@@ -1829,7 +1916,7 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | **Read state** | |
 | `kit.getField(id)` | Get current value of any form field |
 | `kit.getAllFields()` | Frozen copy of all form values |
-| `kit.getVar(key)` | Get a script variable |
+| `kit.getVar(key)` | Get a script variable (also available in templates as `{{var:key}}`) |
 | `kit.getAllVars()` | Frozen copy of all script variables |
 | `kit.getUrlParam(key)` | Get a URL query parameter |
 | `kit.getAllUrlParams()` | Frozen copy of all URL params |
@@ -1838,8 +1925,8 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | `kit.getQuizScores()` | Get quiz scores: `{ total, max, percent, correct_count, question_count, answers[] }`. Each answer includes `{ component_id, page_id, label, options, given_answer, correct_answer, is_correct, points_earned, points_possible, explanation, wrong_message }` |
 | **Write state** | |
 | `kit.setField(id, value)` | Set a field value — immediately reflects on screen |
-| `kit.setVar(key, value)` | Set a script variable |
-| `kit.setGlobal(key, value)` | Set a global (persists across pages) |
+| `kit.setVar(key, value)` | Set a script variable (triggers re-render, available in templates as `{{var:key}}`) |
+| `kit.setGlobal(key, value)` | Set a global (persists across pages, available in templates as `{{global:key}}` — note: does not trigger re-render on its own) |
 | **Button control** | |
 | `kit.setButtonLoading(bool)` | Show/hide loading spinner on Continue button |
 | `kit.setButtonDisabled(bool)` | Enable/disable the Continue button |
@@ -1903,7 +1990,7 @@ document.getElementById('email').addEventListener('blur', () => {
 
 `html` components support two features that make the bridge practical:
 
-1. **Template interpolation:** `{{field_id}}` in HTML content is replaced with the current field value, reactive on re-render.
+1. **Template interpolation:** `{{field_id}}`, `{{var:key}}`, and `{{global:key}}` in HTML content are replaced with the current field value, script variable, or global value respectively. Fields and vars are reactive on re-render. Globals persist across pages but don't trigger re-renders on their own (pair with a `setField` or `setVar` call if you need reactivity).
 2. **Inline script execution:** `<script>` tags inside `html` content are automatically executed after render, with full access to `window.CatalogKit`.
 
 ```json
@@ -2069,6 +2156,44 @@ Decide at page-enter time whether to skip a page entirely.
   }
 }
 ```
+
+#### 11. Fetch server data and display via template interpolation
+
+Fetch data from your backend and store it in vars/globals, then display it in HTML content using `{{var:key}}` or `{{global:key}}` templates. No direct DOM manipulation needed.
+
+```json
+[
+  {
+    "id": "pricing_fetcher",
+    "type": "html",
+    "props": {
+      "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:pricing', async () => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://api.myapp.com/pricing?email=' + encodeURIComponent(kit.getField('email')));\n    const data = await res.json();\n    kit.setVar('plan_name', data.plan_name);\n    kit.setVar('monthly_price', '$' + data.price);\n    kit.setVar('discount_pct', data.discount ? data.discount + '%' : '');\n    kit.setGlobal('customer_tier', data.tier);\n  } catch (err) {\n    kit.setVar('plan_name', 'Standard');\n    kit.setVar('monthly_price', 'Contact us');\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
+    }
+  },
+  {
+    "id": "pricing_display",
+    "type": "html",
+    "props": {
+      "content": "<div style=\"background:#f8fafc;border-radius:12px;padding:24px;text-align:center;\">\n  <h3>Your plan: {{var:plan_name}}</h3>\n  <div style=\"font-size:32px;font-weight:bold;\">{{var:monthly_price}}/mo</div>\n  <div style=\"color:#16a34a;\">{{var:discount_pct}} discount applied</div>\n</div>"
+    }
+  }
+]
+```
+
+**Template syntax reference:**
+
+| Syntax | Source | Reactive? | Example |
+|--------|--------|-----------|---------|
+| `{{field_id}}` | `kit.getField(id)` — form fields | Yes | `{{email}}`, `{{quantity}}` |
+| `{{var:key}}` | `kit.getVar(key)` — script variables | Yes (triggers re-render) | `{{var:plan_name}}`, `{{var:monthly_price}}` |
+| `{{global:key}}` | `kit.getGlobal(key)` — cross-page globals | No (read at render time, pair with setVar to force re-render) | `{{global:customer_tier}}` |
+
+**When to use vars vs globals vs fields:**
+- **`setField`** — when the value should appear in the form submission payload and be subject to validation (user-facing data)
+- **`setVar`** — when the value is intermediate/computed data you want to display in templates but NOT submit as form data (e.g. prices fetched from API, labels, status messages). Triggers re-renders.
+- **`setGlobal`** — when the value must persist across page navigations and you only need to read it in scripts or display it once (e.g. auth tokens, user tier). Does NOT trigger re-renders on its own.
+
+**Iframe `src` also supports these templates:** `{{var:key}}` and `{{global:key}}` work inside `type: "iframe"` `src` props for dynamic embedded URLs.
 
 ### Best practices
 
