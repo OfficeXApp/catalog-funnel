@@ -3,7 +3,7 @@ name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
   Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Submitting form data headlessly via the Agent API for AI agent integrations, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety, (14) Uploading and hosting downloadable files (PDFs, ZIPs, docs) with credit-based billing, (15) Building custom interactive UI with the CatalogKit global API bridge (window.CatalogKit) for inline scripts, real-time field access, and multi-form isolation, (16) AI agents can fill out catalog forms step-by-step via the stateful Agent Session API.
-  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, agent api, headless form, agent session, form submission api, image upload, image compression, webp, typescript, ts config, file upload, file download, downloadable, hosted files, CatalogKit, window.CatalogKit, global api, inline script, html script, custom ui, api bridge, multi-form
+  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, image upload, image compression, webp, typescript, ts config, file upload, file download, downloadable, hosted files, CatalogKit, window.CatalogKit, global api, inline script, html script, custom ui, api bridge, multi-form, agent api, headless form, agent session, form submission api
 ---
 
 # Catalog Kit
@@ -27,7 +27,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Upload images (free)** — automatic WebP compression, thumbnail generation, and CDN delivery at no credit cost
 - **Upload videos** — automatic HLS transcoding for adaptive streaming, served via CDN
 - **Upload & download files** — host downloadable files (PDFs, ZIPs, docs) on S3 with CDN delivery, credit-billed per 50MB
-- **Agent API** — AI agents can fill out catalog forms headlessly via the stateful session API
+- **Agent API** — AI agents can fill out catalog forms headlessly via the stateful session API, with server-side validation and progressive disclosure
 - **TypeScript-as-config** — author catalogs as .ts files with full type safety, then push via CLI
 
 ## Getting Started
@@ -269,6 +269,138 @@ Returns every event in chronological order with a summary: total events, first/l
 
 ---
 
+## Agent API (Headless Form Submission)
+
+AI agents can interact with catalogs programmatically without a browser. The Agent API provides a stateful session that walks through the catalog page-by-page, with server-side validation and progressive field disclosure.
+
+### Start a session
+
+```
+POST https://api.catalogkit.cc/agent/v1/sessions
+```
+
+```json
+{
+  "session_id": "my-unique-session-id",
+  "catalog_slug": "enterprise-demo",
+  "user_id": "usr_abc123"
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "session_id": "my-unique-session-id",
+    "status": "active",
+    "step": {
+      "page_id": "qualification",
+      "title": "Tell us about your company",
+      "agent_context": "Qualify the lead before showing pricing",
+      "fields": [
+        {
+          "id": "company_name",
+          "type": "short_text",
+          "label": "Company Name",
+          "required": true,
+          "agent_hint": "The legal entity name"
+        },
+        {
+          "id": "industry",
+          "type": "dropdown",
+          "label": "Industry",
+          "required": true,
+          "options": [
+            { "value": "saas", "label": "SaaS" },
+            { "value": "healthcare", "label": "Healthcare" }
+          ]
+        }
+      ],
+      "disclosed": [
+        { "type": "heading", "text": "Enterprise Demo Request" }
+      ]
+    }
+  }
+}
+```
+
+### Advance to next step
+
+```
+POST https://api.catalogkit.cc/agent/v1/sessions/{session_id}/advance
+```
+
+```json
+{
+  "page_id": "qualification",
+  "answers": {
+    "company_name": "Acme Corp",
+    "industry": "healthcare"
+  }
+}
+```
+
+**Response (next step):**
+```json
+{
+  "ok": true,
+  "data": {
+    "step": {
+      "page_id": "pricing",
+      "title": "Choose your plan",
+      "fields": [
+        {
+          "id": "selected_plan",
+          "type": "dropdown",
+          "label": "Plan",
+          "required": true,
+          "options": [
+            { "value": "pro", "label": "Pro - $99/mo" },
+            { "value": "enterprise", "label": "Enterprise - Custom" }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+**Response (complete):**
+```json
+{
+  "ok": true,
+  "data": {
+    "complete": true,
+    "form_state": { "company_name": "Acme Corp", "industry": "healthcare", "selected_plan": "pro" }
+  }
+}
+```
+
+### Check session status
+
+```
+GET https://api.catalogkit.cc/agent/v1/sessions/{session_id}
+```
+
+### Key behaviors
+
+- **Idempotent**: Resuming with an existing `session_id` returns the current step (no duplicate sessions)
+- **Server-gated**: Only the current page's fields are returned — pricing and later pages are hidden until conditions are met
+- **Validated**: Answers are validated server-side (required fields, email format, number ranges, etc.)
+- **Progressive**: Conditional fields and routing work the same as the browser UI — the server evaluates visibility and routing conditions
+- **Sessions expire** after 1 hour of inactivity (TTL refreshed on each advance)
+
+### Agent-friendly schema fields
+
+When creating catalogs, add these optional fields to improve AI agent interactions:
+
+- `agent` on catalog root — `{ enabled: true, description: "What this catalog does" }`
+- `agent_context` on pages — explains the page's purpose to agents
+- `agent_hint` on components — explains what a field means semantically
+
+---
+
 ## A/B Testing with Weighted Variants
 
 Test different versions of your catalog by adding weighted variants to your schema. Set `variant_routing: "random"` for weighted random routing, `"hint"` for AI-based routing, or `"hybrid"` for both.
@@ -480,6 +612,36 @@ The download opens in a new tab to prevent losing form progress on mobile.
 ## Webhooks
 
 If your catalog has a `webhook_url` configured in its schema, all visitor events are forwarded there in real time. Each webhook payload includes an `event_id` (ULID) for deduplication and `schema_ref` with human-readable page/component context.
+
+> **Important:** `webhook_url` is for **passive event forwarding only** — it fires asynchronously after events occur and does NOT block page navigation. If you need to validate form data against your server before allowing the user to proceed (e.g., check if an email is already registered, verify a wallet address, or run custom eligibility logic), you must use a **CatalogKit `beforenext` script** instead. See [Server-Side Form Validation](#server-side-form-validation-common-pattern) below.
+
+---
+
+## Server-Side Form Validation (Common Pattern)
+
+The platform does **not** automatically call your server when the user clicks Continue. Client-side validation (required fields, format checks) runs automatically, but any custom server-side validation must be wired up by the developer using the CatalogKit scripting bridge.
+
+**If your server returns an error (e.g., HTTP 422 with a rejection reason) but no error message appears on the frontend, this is the fix:**
+
+Add an `html` component with an inline `<script>` to the page that needs server validation:
+
+```json
+{
+  "id": "server_validator",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('beforenext:YOUR_PAGE_ID', async (e) => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://your-api.com/validate', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        email: kit.getField('email'),\n        name: kit.getField('name'),\n      }),\n    });\n    const data = await res.json();\n\n    if (!res.ok || data.status === 'rejected') {\n      // Show the server's error message on a specific field\n      kit.setValidationError('email', data.reason || data.error || 'Validation failed');\n      e.preventDefault(); // Block navigation — user stays on this page\n    }\n  } catch (err) {\n    kit.setValidationError('email', 'Network error — please try again');\n    e.preventDefault();\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
+  }
+}
+```
+
+**Key requirements:**
+- **`e.preventDefault()`** — without this, the page navigates away even if validation fails
+- **`kit.setValidationError(componentId, message)`** — displays the error inline above the field; pass `null` to clear it later
+- **`kit.setButtonLoading(true/false)`** — shows a spinner on Continue while the server call is in-flight
+- **Scoped event** — use `beforenext:YOUR_PAGE_ID` (not just `beforenext`) to only run on the relevant page
+
+> **See also:** The [CatalogKit Global API](#catalogkit-global-api-windowcatalogkit) section has more advanced examples including dynamic routing based on server response, real-time blur validation, and conditional UI.
 
 ---
 
@@ -820,7 +982,7 @@ Set `auto_skip: true` on a page to automatically skip it when all visible input 
 With `?email=user@example.com&name=John` (mapped via `prefill_mappings`), this page is skipped entirely. Rules:
 - Only skips if the page has at least one visible input and **all** of them have values
 - Display-only pages (no inputs) are never auto-skipped
-- Runs after page-enter scripts, so scripts can set values that satisfy the skip condition
+- Runs after `on_enter` hooks, so hooks can set values that satisfy the skip condition
 - Skipped pages do NOT appear in browser history (Back button jumps past them)
 - A `page_auto_skipped` analytics event is fired for each skipped page
 
@@ -913,21 +1075,26 @@ In this example, the button stays disabled until both `email` and `name` have va
 
 #### Script-Controlled Button State
 
-For more complex logic (e.g., async validation, API checks), use `setButtonDisabled()` and `setButtonLoading()` via the CatalogKit API (`window.CatalogKit`):
+For more complex logic (e.g., async validation, API checks), use `setButtonDisabled()` and `setButtonLoading()` in script hooks:
 
-```javascript
-const kit = window.CatalogKit.get();
-kit.on('pageenter', async () => {
-  // Disable button until an API call succeeds
-  kit.setButtonDisabled(true);
-  kit.setButtonLoading(true);
+```typescript
+{
+  hooks: {
+    on_enter: (ctx) => {
+      // Disable button until an API call succeeds
+      ctx.setButtonDisabled(true);
+      ctx.setButtonLoading(true);
 
-  const r = await fetch("https://api.example.com/check");
-  const data = await r.json();
-  kit.setField("status", data.status);
-  kit.setButtonDisabled(false);
-  kit.setButtonLoading(false);
-});
+      ctx.fetch("https://api.example.com/check")
+        .then(r => r.json())
+        .then(data => {
+          ctx.setField("status", data.status);
+          ctx.setButtonDisabled(false);
+          ctx.setButtonLoading(false);
+        });
+    }
+  }
+}
 ```
 
 You can also combine both approaches — required field checking handles the simple case automatically, while `setButtonDisabled(true)` from a script adds additional blocking conditions. The button is disabled if **either** any required fields are unfilled **or** `setButtonDisabled(true)` was called from a script.
@@ -940,24 +1107,27 @@ Both `setButtonDisabled` and `setButtonLoading` reset to `false` automatically o
 
 Use `setValidationError(componentId, message)` to show custom error messages on any field from scripts. Pass `null` to clear:
 
-```javascript
-const kit = window.CatalogKit.get();
-kit.on('fieldchange', async (e) => {
-  // Custom async validation or LLM-powered feedback
-  const resp = await fetch("https://api.example.com/validate", {
-    method: "POST",
-    body: JSON.stringify({ answer: e.value }),
-  });
-  const data = await resp.json();
-  if (!data.valid) {
-    kit.setValidationError(e.fieldId, data.feedback); // e.g. "Almost! Think about X"
-  } else {
-    kit.setValidationError(e.fieldId, null); // Clear error
+```typescript
+{
+  hooks: {
+    on_change: async (ctx) => {
+      // Custom async validation or LLM-powered feedback
+      const resp = await ctx.fetch("https://api.example.com/validate", {
+        method: "POST",
+        body: JSON.stringify({ answer: ctx.field_value }),
+      });
+      const data = await resp.json();
+      if (!data.valid) {
+        ctx.setValidationError(ctx.field_id, data.feedback); // e.g. "Almost! Think about X"
+      } else {
+        ctx.setValidationError(ctx.field_id, null); // Clear error
+      }
+    }
   }
-});
+}
 ```
 
-This works with **any input type** — not just quiz components. Combine with CatalogKit `fieldchange` events to provide real-time feedback from REST APIs or LLMs as the user types/selects.
+This works with **any input type** — not just quiz components. Combine with `on_change` hooks to provide real-time feedback from REST APIs or LLMs as the user types/selects.
 
 ### Component Width (Multi-Column Layout)
 
@@ -1608,33 +1778,27 @@ Customize what visitors see after submitting:
 
 **Action types:** `fill_again` (reset form), `share` (copy URL), `redirect` (navigate to URL). All fields are optional — omit `completion` entirely for a minimal checkmark screen.
 
-### Scripting via CatalogKit API (`window.CatalogKit`)
+### Dynamic Behavior (CatalogKit API)
 
-All imperative logic — API calls, dynamic routing, cross-page state, validation — is handled through the CatalogKit API bridge (`window.CatalogKit`). Use inline `<script>` tags in `html` components or external scripts to subscribe to lifecycle events and mutate catalog state.
+For custom client-side logic, use the `window.CatalogKit` global API via inline `<script>` tags:
 
-```javascript
-const kit = window.CatalogKit.get();
-
-// React to page entry
-kit.on('pageenter', (e) => {
-  kit.setVar("entered_at", Date.now());
-});
-
-// Block navigation if email is missing
-kit.on('beforenext', (e) => {
-  if (!kit.getField('email')) {
-    e.preventDefault();
-  }
-});
-
-// Update display based on quiz scores on the results page
-kit.on('pageenter:results', (e) => {
-  const fields = kit.getAllFields();
-  kit.setComponentProp("score-display", "text", 'You scored ' + fields.correct + ' / ' + fields.total);
-});
+```html
+<script>
+  const kit = window.CatalogKit.get();
+  kit.on('fieldchange:email', ({ value }) => {
+    console.log('Email changed to', value);
+  });
+  kit.on('beforenext:pricing', async ({ preventDefault }) => {
+    // Custom validation or API call
+    const ok = await fetch('/validate', { method: 'POST', body: JSON.stringify(kit.getAllFields()) });
+    if (!ok) preventDefault();
+  });
+</script>
 ```
 
-See the **CatalogKit Global API** section below for the full API reference, event types, and scoping patterns.
+Available events: `pageenter`, `pageexit`, `beforenext`, `submit`, `fieldchange` — all support scoping (e.g., `fieldchange:email`).
+
+Available methods: `getField`, `setField`, `getAllFields`, `setButtonLoading`, `setButtonDisabled`, `setValidationError`, `setComponentProp`, `goNext`, `goBack`.
 
 ---
 
@@ -1681,7 +1845,7 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | `kit.setButtonDisabled(bool)` | Enable/disable the Continue button |
 | `kit.setValidationError(id, msg)` | Show a custom error on a field (`null` to clear) |
 | **Navigation** | |
-| `kit.goNext()` | Advance to next page (runs validation + event listeners) |
+| `kit.goNext()` | Advance to next page (runs validation + hooks) |
 | `kit.goBack()` | Go to previous page |
 | **Component props** | |
 | `kit.setComponentProp(id, prop, value)` | Override any component prop at runtime (e.g. `hidden`, `label`, `options`). Works on ALL component types — display and input alike |
@@ -1691,7 +1855,7 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | **Utilities** | |
 | `kit.fetch` | Alias for `globalThis.fetch` |
 
-### Events
+### Events — scoped lifecycle hooks
 
 Events follow the pattern `event` or `event:scope_id`. Unscoped listeners fire for all pages/fields. Scoped listeners fire only for the specified page or field.
 
@@ -1919,6 +2083,16 @@ Decide at page-enter time whether to skip a page entirely.
 - Scripts execute in a try/catch — errors are logged to console but never crash the catalog renderer.
 - Async callbacks on `beforenext` and `submit` are fully awaited — you can safely `await fetch()` inside them.
 - **Use `kit.getQuizScores()`** on results pages to access scores with full context (question labels, options, answers, explanations).
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Server returns 422/error but no error shows on frontend | No `beforenext` listener wired up | Add an `html` component with a `beforenext` script that calls `setValidationError()` and `preventDefault()` — see [Server-Side Form Validation](#server-side-form-validation-common-pattern) |
+| Error shows but page still navigates away | Missing `e.preventDefault()` in the `beforenext` callback | Add `e.preventDefault()` after setting the validation error |
+| `window.CatalogKit.on is not a function` | Calling methods on the registry instead of an instance | Use `const kit = window.CatalogKit.get(); kit.on(...)` |
+| `setValidationError` doesn't display anything | Wrong `componentId` passed — must match the `id` of an input component on the current page | Check the component `id` in your schema matches the first argument |
+| Script doesn't execute | `html` component not on the current page, or `content` prop missing `<script>` tags | Ensure the `html` component is in the page's `components` array and the content is wrapped in `<script>...</script>` |
 
 ### Debug mode
 
