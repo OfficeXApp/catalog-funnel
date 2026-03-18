@@ -2,8 +2,8 @@
 name: catalog-kit
 description: |
   Build and manage marketing catalogs, landing pages, and multi-step funnels with your AI agent. Create catalogs from JSON schemas, publish them instantly, run A/B tests with weighted variants, and track visitor analytics — all through conversation.
-  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Submitting form data headlessly via the Agent API for AI agent integrations, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety, (14) Uploading and hosting downloadable files (PDFs, ZIPs, docs) with credit-based billing, (15) Building custom interactive UI with the CatalogKit global API bridge (window.CatalogKit) for inline scripts, real-time field access, and multi-form isolation, (16) AI agents can fill out catalog forms step-by-step via the stateful Agent Session API.
-  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, image upload, image compression, webp, typescript, ts config, file upload, file download, downloadable, hosted files, CatalogKit, window.CatalogKit, global api, inline script, html script, custom ui, api bridge, multi-form, agent api, headless form, agent session, form submission api
+  Use when: (1) Creating or updating a catalog/funnel/landing page, (2) Checking analytics like visitors, conversions, and drop-off rates, (3) Running A/B tests on different catalog versions, (4) AI-routing visitors to the right catalog variant with natural language hints, (5) Managing API keys for team access, (6) Uploading videos for catalogs, (7) Viewing individual visitor journeys, (8) Reviewing response distributions for form fields, (9) Creating sandboxes to safely edit catalogs without affecting production, (10) Using the element inspector to get exact component references for AI agents, (11) Submitting form data headlessly via the Agent API for AI agent integrations, (12) Uploading and compressing images for fast loading, (13) Authoring catalogs as TypeScript files with full type safety, (14) Uploading and hosting downloadable files (PDFs, ZIPs, docs) with credit-based billing, (15) Building custom interactive UI with the CatalogKit global API bridge (window.CatalogKit) for inline scripts, real-time field access, and multi-form isolation, (16) AI agents can fill out catalog forms step-by-step via the stateful Agent Session API, (17) Configuring advanced Stripe checkout with 3D Secure verification and authorization holds for free trial funnels.
+  Triggers: catalog funnel, catalog kit, funnel builder, landing page, lead capture, create catalog, catalog analytics, conversion funnel, form builder, ab test, catalog api, ai routing, variant routing, hint routing, sandbox, element inspector, devtools, image upload, image compression, webp, typescript, ts config, file upload, file download, downloadable, hosted files, CatalogKit, window.CatalogKit, global api, inline script, html script, custom ui, api bridge, multi-form, agent api, headless form, agent session, form submission api, stripe checkout, 3d secure, 3ds, free trial, payment verification, trial end behavior, billing server, stripe webhooks
 ---
 
 # Catalog Kit
@@ -2752,6 +2752,137 @@ Built-in developer tool for AI agent workflows. Hold **Shift+Alt** and hover ove
 2. User pastes into Claude: "change this element: `{...copied JSON...}` to say 'Welcome Back'"
 3. AI agent reads the `catalog_id`, `page_id`, `component_id`, and `api_endpoint` from the JSON
 4. AI agent fetches the catalog via `GET /api/v1/catalogs/{catalog_id}`, finds the component at `schema.pages.{page_id}.components` where `id == component_id`, updates the text, and PUTs back
+
+---
+
+## Checkout — 3D Secure & Trial Protection
+
+Catalog Kit supports advanced Stripe checkout features for protecting free trial funnels from payment failures and chargebacks.
+
+### 3D Secure Verification
+
+Force bank-level authentication (OTP, biometric, bank app) on every card payment. This is the single most impactful setting for reducing payment failures at trial end — it verifies the cardholder is real and authenticated at signup.
+
+```jsonc
+{
+  "settings": {
+    "checkout": {
+      "payment_type": "subscription",
+      "require_3ds": true,
+      "free_trial": { "enabled": true, "days": 14 },
+      "trial_end_behavior": "cancel"
+    }
+  }
+}
+```
+
+When enabled, the Stripe Checkout session includes `payment_method_options.card.request_three_d_secure: "any"`. The frontend shows a "3D Secure Checkout" header badge and a blue explainer banner telling the user their bank will ask for verification. Button text defaults to "Start Free Trial" when a trial is active.
+
+### Trial End Behavior
+
+Controls what Stripe does if the customer's payment method fails when the trial ends:
+
+| Value | Behavior |
+|---|---|
+| `"cancel"` (default) | Cancel the subscription — no retries |
+| `"create_invoice"` | Create an invoice and retry via Stripe's smart schedule |
+| `"pause"` | Pause the subscription until payment resolves |
+
+Recommended combo: `require_3ds: true` + `trial_end_behavior: "cancel"` — verifies the card upfront, and cleanly cancels if it still fails.
+
+### Stripe Overrides (Advanced Pass-Through)
+
+For flows beyond what `require_3ds` and `trial_end_behavior` cover, use `stripe_overrides` to pass Stripe params directly through the checkout session. Your billing server handles the lifecycle via Stripe webhooks.
+
+```jsonc
+{
+  "settings": {
+    "checkout": {
+      "stripe_overrides": {
+        "mode_override": "payment",
+        "payment_intent_data": {
+          "capture_method": "manual",
+          "setup_future_usage": "off_session",
+          "statement_descriptor": "ACME TRIAL"
+        }
+      }
+    }
+  }
+}
+```
+
+**Available overrides:** `mode_override` (force session mode), `payment_intent_data` (capture_method, setup_future_usage, statement_descriptor, transfer_data), `subscription_data` (description, metadata), `consent_collection` (terms_of_service, promotions).
+
+When `mode_override: "payment"` is set for subscription items, Catalog Kit automatically strips recurring pricing from inline items. Use `amount_cents` instead of `stripe_price_id` for recurring prices in payment mode.
+
+### Bring Your Own Billing Server
+
+Catalog Kit handles the checkout funnel (session creation, 3DS, overrides) but does **not** manage post-payment lifecycle. Stripe webhooks are server-to-server and independent of the `catalogkit.cc` redirect URLs — configure them in your Stripe Dashboard to point at your own server.
+
+**Setup:**
+1. Stripe Dashboard → Developers → Webhooks → add your endpoint
+2. Subscribe to: `checkout.session.completed`, `payment_intent.amount_capturable_updated`, `invoice.payment_failed`, etc.
+3. Your server uses the same Stripe secret key you provided to Catalog Kit
+4. Every session includes metadata (`catalog_id`, `catalog_slug`, `user_id`, `tracer_id`) for correlation
+
+### Recipe: Guarded 7-Day Trial (Manual Capture)
+
+The most conversion-protective free trial pattern. Instead of a $0 subscription trial, this authorizes the full subscription amount as a "pending" hold on the customer's card, then captures or voids based on trial outcome.
+
+**Step 1 — Catalog Kit config:**
+
+```jsonc
+{
+  "settings": {
+    "checkout": {
+      "payment_type": "subscription",
+      "require_3ds": true,
+      "stripe_overrides": {
+        "mode_override": "payment",
+        "payment_intent_data": {
+          "capture_method": "manual",
+          "setup_future_usage": "off_session"
+        }
+      },
+      "show_disclaimer": true,
+      "disclaimer_text": "A temporary hold for the full subscription amount will appear on your card. This is NOT a charge — it verifies your funds and is released if you cancel during the trial."
+    }
+  }
+}
+```
+
+Note: Use `amount_cents` on line items (not `stripe_price_id`) since payment mode can't accept recurring Stripe Prices.
+
+**Step 2 — Your billing server handles the lifecycle:**
+
+```
+Webhook: checkout.session.completed
+├── Extract payment_intent from session
+├── Retrieve PaymentIntent → read latest_charge.payment_method_details.card.capture_before
+├── Schedule capture at: min(trial_end, capture_before - 1 hour)
+│   ⚠️ Visa often expires at 4d 18h (114 hours), Mastercard/Amex ~7 days
+└── Store { payment_intent_id, customer_id, payment_method_id, capture_deadline }
+
+Cron/Scheduler: At capture deadline
+├── If user cancelled → paymentIntents.cancel(id)  (releases hold)
+├── If trial active → paymentIntents.capture(id)    (converts to real charge)
+└── After capture → Create Subscription using saved payment_method for Month 2+
+
+User cancels during trial:
+└── paymentIntents.cancel(id)  — MUST do this to release hold
+    (Uncaptured auths incur card network fees and freeze customer funds)
+```
+
+**Step 3 — Handle edge cases on your server:**
+
+| Scenario | Action |
+|---|---|
+| Card doesn't support separate auth/capture (LATAM debit, Indian banks, some prepaid) | Stripe returns 402 on confirm. Fallback: charge $1 verification fee immediately, or switch to SetupIntent ($0 verify) |
+| `capture_before` is earlier than trial end (Visa ~4.75 days) | Capture early based on `capture_before - 1 hour`, not trial end date |
+| User's bank shows "pending" charge → support ticket | Address in "Trial Started" email: "You may see a pending authorization for [amount] — this is not a charge and will be released if you cancel" |
+| Hold expires without capture | Stripe auto-voids. Your server must detect this and either re-authorize or cancel gracefully |
+
+**Why this pattern exists:** Standard subscription trials ($0 with saved card) have ~15-25% payment failure rates at trial end because the card was never tested for funds. A manual-capture hold proves the funds exist today, and 3DS proves the cardholder is real. Combined failure rate drops to ~3-5%.
 
 ---
 
