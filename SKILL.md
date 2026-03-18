@@ -609,13 +609,14 @@ Test different versions of your catalog by adding weighted variants to your sche
     "variant_routing": "random",
     "variants": [
       { "id": "v1", "slug": "control", "weight": 50, "description": "Original" },
-      { "id": "v2", "slug": "new-headline", "weight": 50, "description": "New headline" }
+      { "id": "v2", "slug": "new-headline", "weight": 50, "description": "New headline" },
+      { "id": "v3", "slug": "old-test", "weight": 50, "enabled": false, "description": "Paused variant" }
     ]
   }
 }
 ```
 
-Variants with `target_slug` route visitors to a different catalog entirely. Variants without `target_slug` apply personalization hints within the same catalog.
+Variants with `target_slug` route visitors to a different catalog entirely. Variants without `target_slug` apply personalization hints within the same catalog. Set `enabled: false` to exclude a variant from all routing (hint, random, hybrid) without deleting it — useful for pausing underperforming A/B test arms. Direct URL access (`/slug/variant-slug`) still works for disabled variants so existing links don't break.
 
 ---
 
@@ -1970,6 +1971,12 @@ Options support: `value`, `label`, `description`, `image` (thumbnail), `button` 
 
 Values are stored with compound IDs: `checkboxComponentId.optionValue.inputId`. Nested input `default_value` (in `input.props.default_value` or `input.default_value`) is initialized at startup, so nested values are available via `getAllFields()` and template interpolation (`{{checkboxId.optionValue.inputId}}`) from the first render.
 
+> **CRITICAL for AI agents writing scripts:** Nested input values are **only** accessible via their compound ID. Using the bare `input.id` alone will **always return undefined**. For example, given a checkboxes component with `id: "tasks"`, an option with `value: "step_1"`, and a nested input with `id: "proof_url"`:
+> - **CORRECT:** `kit.getField("tasks.step_1.proof_url")`
+> - **WRONG:** `kit.getField("proof_url")` — returns `undefined`
+> - **CORRECT event scope:** `kit.on("fieldchange:tasks.step_1.proof_url", ...)`
+> - **WRONG event scope:** `kit.on("fieldchange:proof_url", ...)` — never fires
+
 ```json
 {
   "id": "onboarding_tasks",
@@ -2198,7 +2205,7 @@ Events follow the pattern `event` or `event:scope_id`. Unscoped listeners fire f
 
 | Event | Scope | Payload | Async? | Description |
 |-------|-------|---------|--------|-------------|
-| `fieldchange` | field ID | `{ fieldId, value, prevValue }` | No | A form field value changed |
+| `fieldchange` | field ID | `{ fieldId, value, prevValue }` | No | A form field value changed. **For nested checkbox/multiple_choice inputs, scope must use the compound ID** (e.g. `fieldchange:checkboxId.optionValue.inputId`), not the bare input ID. |
 | `pageenter` | page ID | `{ pageId }` | No | Page became active (after transition) |
 | `pageexit` | page ID | `{ pageId }` | Yes | About to leave page (after beforenext) |
 | `beforenext` | page ID | `{ pageId, preventDefault(), setNextPage(id) }` | Yes | After validation, before navigation — can block or redirect |
@@ -2220,6 +2227,11 @@ kit.on('fieldchange', (e) => { ... });
 
 // Scoped — fires only when 'email' field changes
 kit.on('fieldchange:email', (e) => { ... });
+
+// Scoped — nested checkbox input (MUST use compound ID)
+// Given: checkboxes id="tasks", option value="setup", nested input id="proof_url"
+kit.on('fieldchange:tasks.setup.proof_url', (e) => { ... });
+// ❌ WRONG: kit.on('fieldchange:proof_url', ...) — never fires
 
 // Page-specific enter/exit
 kit.on('pageenter:pricing', (e) => { ... });
@@ -2438,6 +2450,20 @@ Fetch data from your backend and store it in vars/globals, then display it in HT
 | `{{var:key}}` | `kit.getVar(key)` — script variables | Yes (triggers re-render) | `{{var:plan_name}}`, `{{var:monthly_price}}` |
 | `{{global:key}}` | `kit.getGlobal(key)` — cross-page globals | No (read at render time, pair with setVar to force re-render) | `{{global:customer_tier}}` |
 
+#### 12. Reading nested checkbox inputs in scripts (compound IDs)
+
+When checkboxes have nested inputs (e.g. proof URLs, wallet addresses), you **must** use the compound ID format `checkboxId.optionValue.inputId` — not the bare input ID. This is the #1 scripting mistake with nested inputs.
+
+```json
+{
+  "id": "thread_verifier",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\n// Given a checkboxes component:\n//   id: \"threads_checklist\"\n//   options: [{ value: \"thread_1\", inputs: [{ id: \"proof_url\", ... }] }, ...]\n\n// ✅ CORRECT — use compound ID: checkboxId.optionValue.inputId\nconst url1 = kit.getField('threads_checklist.thread_1.proof_url');\nconst url2 = kit.getField('threads_checklist.thread_2.proof_url');\n\n// ❌ WRONG — bare input ID returns undefined\n// kit.getField('proof_url')  → always undefined\n\n// Listen for changes on nested inputs — also needs compound ID\nkit.on('fieldchange:threads_checklist.thread_1.proof_url', (e) => {\n  console.log('Thread 1 URL changed to:', e.value);\n});\n\n// Validate all nested inputs before navigation\nkit.on('beforenext:my_page', async (e) => {\n  const urls = [];\n  for (let i = 1; i <= 3; i++) {\n    const url = kit.getField('threads_checklist.thread_' + i + '.proof_url');\n    if (url && url.trim()) urls.push(url);\n  }\n  if (urls.length === 0) {\n    kit.setValidationError('threads_checklist', 'Please paste at least one URL');\n    e.preventDefault();\n  }\n});\n</script>"
+  }
+}
+```
+
 **When to use vars vs globals vs fields:**
 - **`setField`** — when the value should appear in the form submission payload and be subject to validation (user-facing data)
 - **`setVar`** — when the value is intermediate/computed data you want to display in templates but NOT submit as form data (e.g. prices fetched from API, labels, status messages). Triggers re-renders.
@@ -2466,6 +2492,8 @@ Fetch data from your backend and store it in vars/globals, then display it in HT
 | Server returns 422/error but no error shows on frontend | No `beforenext` listener wired up | Add an `html` component with a `beforenext` script that calls `setValidationError()` and `preventDefault()` — see [Server-Side Form Validation](#server-side-form-validation-common-pattern) |
 | Error shows but page still navigates away | Missing `e.preventDefault()` in the `beforenext` callback | Add `e.preventDefault()` after setting the validation error |
 | `window.CatalogKit.on is not a function` | Calling methods on the registry instead of an instance | Use `const kit = window.CatalogKit.get(); kit.on(...)` |
+| `kit.getField()` returns `undefined` for a nested checkbox input | Using the bare input ID instead of the compound ID | Use `kit.getField("checkboxId.optionValue.inputId")` — e.g. `kit.getField("tasks.step_1.proof_url")` not `kit.getField("proof_url")`. See [Cookbook #12](#12-reading-nested-checkbox-inputs-in-scripts-compound-ids). |
+| `fieldchange:inputId` listener never fires for nested input | Same cause — bare input ID doesn't match the compound key in form state | Use `kit.on("fieldchange:checkboxId.optionValue.inputId", ...)` |
 | `setValidationError` doesn't display anything | Wrong `componentId` passed — must match the `id` of an input component on the current page | Check the component `id` in your schema matches the first argument |
 | Script doesn't execute | `html` component not on the current page, or `content` prop missing `<script>` tags | Ensure the `html` component is in the page's `components` array and the content is wrapped in `<script>...</script>` |
 
@@ -2527,20 +2555,22 @@ export default catalog;
 - **Default export** — the CLI expects `export default catalog` (or any default export of a `CatalogSchema` object).
 - **No need to JSON.stringify** — the CLI handles the entire TS → JSON → API upload pipeline.
 
+> **⚠️ AI Agent Warning:** Do NOT manually compile `.ts` catalog files to JSON. Do NOT use `tsc`, `tsx`, `esbuild`, or any manual TS → JSON conversion step. The CLI (`catalogs catalog push catalog.ts`) handles TypeScript transpilation, function serialization, and API upload in a single command. Just pass the `.ts` file directly to the CLI — it does everything.
+
 ### Pushing a TypeScript catalog
 
 ```bash
 # Set your token (only required env var)
 export CATALOG_KIT_TOKEN="cfk_..."
 
-# Push and publish
+# Push and publish — pass the .ts file directly, the CLI handles compilation
 catalogs catalog push catalog.ts --publish
 
 # Or via npx (no global install needed)
 npx @officexapp/catalogs-cli catalog push catalog.ts --publish
 ```
 
-The CLI transpiles the `.ts` file, extracts the default export, serializes any functions, and calls `PUT /api/v1/catalogs/:id` with the resulting JSON.
+The CLI handles the entire pipeline internally: transpile TS → extract default export → serialize functions → upload JSON to API. You never need to run these steps yourself.
 
 ---
 
@@ -2657,6 +2687,14 @@ Both `hint`/`hints` and `user_id`/`domain` are accepted.
 ```
 
 `reason` values: `ai_matched` (LLM picked best match), `ai_prefill_only` (no variants, only field prefill), `ai_cached` (cached result), `weighted_random` (randomly selected by weight), `hybrid_ai` (hybrid mode, LLM picked), `hybrid_random_fallback` (hybrid mode, LLM failed, random pick), `single_variant` (only one variant exists), `no_variants` (catalog has no variants), `fallback` (LLM couldn't decide, returned first variant). `target_slug` is included when the variant routes to a different catalog. `prefill` is included when AI-prefillable fields were matched from the hint.
+
+**Fallback behavior:**
+- 0 variants, no prefillable fields → returns null, base catalog renders as-is
+- 0 variants, has prefillable fields → LLM call for prefill only, returns `reason: "ai_prefill_only"`
+- 1 variant → returns it directly (skip variant LLM), still runs prefill if fields exist
+- 2+ variants → single LLM call for variant + prefill; if LLM fails, falls back to first variant
+- API error → base catalog renders normally (routing failure is silent)
+- Variants with `enabled: false` are excluded from all routing counts above (but remain accessible via direct URL)
 
 ### Frontend hint URLs
 
