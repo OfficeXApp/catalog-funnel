@@ -18,7 +18,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Publish instantly** — catalogs go live at your subdomain (SUBDOMAIN.catalogkit.cc) or custom domain
 - **Check analytics** — see visitors, conversions, page drop-off, field completions, referrer sources, and revenue
 - **Run A/B tests** — use weighted variants to split traffic to find what converts best
-- **AI variant routing** — auto-route visitors to the best catalog variant using natural language hints
+- **AI variant routing & prefill** — auto-route visitors to the best catalog variant and pre-fill qualifying form fields using natural language hints
 - **Sandbox editing** — clone a catalog to safely make changes without affecting the live version, then promote when ready
 - **Element inspector** — hold Shift+Alt to hover-inspect any element (including the top navbar) and copy its exact `pageId/componentId` reference for AI agents
 - **View visitor journeys** — trace exactly what each visitor did step by step
@@ -619,6 +619,58 @@ Variants with `target_slug` route visitors to a different catalog entirely. Vari
 
 ---
 
+## Personalization Architecture: Variants vs Dynamic Offers
+
+**Q: Can I dynamically choose which offers to show each visitor based on `?hint=` or other signals?**
+
+Catalog Kit uses a **static variants + dynamic routing** model. The AI picks *which variant* to show (via `?hint=`), but each variant defines a fixed, predetermined sequence of pages and offers. This is intentional — here's why:
+
+### How it works
+
+1. **Visitor arrives** with `?hint="startup founder looking for analytics"` (or any natural language)
+2. **AI routing** (sub-400ms) reads the hint + variant descriptions and picks the best-fit variant
+3. **Variant activates** — the visitor sees a fully predetermined funnel with specific pages, offers, and copy
+4. **`__variants` personalization** — within that variant, individual component props (headlines, images, descriptions) can further adapt based on hint values
+
+### Why not fully dynamic offer selection?
+
+| Concern | Why static variants win |
+|---|---|
+| **Pricing integrity** | Each variant maps to known Stripe price IDs. Dynamic assembly risks showing wrong prices or incompatible bundles. |
+| **Auditability** | "Why did this visitor see offer X?" is answerable: they hit variant B, which shows offers 1→2→3. No LLM forensics needed. |
+| **Compliance** | OfficeX customers set credit rate limits. Predictable offer sequences make spend auditable and controllable. |
+| **Performance** | One LLM call for variant routing is fast (~400ms). Adding per-page offer selection would double latency and cost. |
+| **Testing** | Each variant is independently testable with known conversion metrics. Dynamic offers make A/B analysis statistically unreliable. |
+
+### What to do instead
+
+- **Add more variants** — 4–8 variants with AI hint routing covers most personalization needs, and each is a fully testable funnel
+- **Use `__variants` on component props** — vary headlines, images, copy, even offer titles/prices per hint value within a single catalog structure
+- **Use `target_slug`** — A/B test entirely different catalog structures by routing variants to separate catalogs
+- **Use conditional routing edges** — route visitors to different pages based on `url_param`, `field`, `hint`, `score`, or `video` conditions
+
+### The mental model
+
+Think of it as: **AI chooses the path, but each path is a paved road — not generated on the fly.** This gives you the personalization benefits of dynamic content with the reliability and measurability of static funnels.
+
+```
+?hint="enterprise CTO"
+    → AI routes to variant "enterprise"
+        → Page 1: enterprise headline + ROI calculator offer
+        → Page 2: annual pricing offer (predetermined Stripe price)
+        → Page 3: enterprise checkout
+
+?hint="solo freelancer"
+    → AI routes to variant "freelancer"
+        → Page 1: freelancer headline + quick-start offer
+        → Page 2: monthly pricing offer (different Stripe price)
+        → Page 3: simple checkout
+```
+
+Both paths are fully defined in the catalog schema. The AI just picks which one fits.
+
+---
+
 ## Schema Introspection
 
 Get a map of all pages and components in a catalog — useful for understanding the structure before querying analytics:
@@ -845,7 +897,7 @@ Add an `html` component with an inline `<script>` to the page that needs server 
 
 ## Variant Analytics
 
-Every catalog gets an automatic `catalog:{catalog_id}` tag. To compare analytics across catalog variants (e.g. for A/B tests), add the base catalog's `catalog:{base_id}` tag to each variant's `schema.tags`. API keys scoped with matching `tag_patterns` can then query analytics across all tagged variants.
+Every catalog gets its `catalog_id` (e.g. `catalog_550e8400-e29b-41d4-a716-446655440000`) automatically added as a tag. To compare analytics across catalog variants (e.g. for A/B tests), add the base catalog's `catalog_id` to each variant's `schema.tags`. API keys scoped with matching `tag_patterns` can then query analytics across all tagged variants.
 
 ---
 
@@ -2546,9 +2598,9 @@ catalogs catalog push my-catalog.ts --publish
 
 ---
 
-## AI Variant Routing
+## AI Variant Routing & Prefill
 
-Automatically route visitors to the best catalog variant using natural language hints. Instead of requiring exact variant slugs, pass a description and let the AI pick the right variant.
+Automatically route visitors to the best catalog variant **and pre-fill qualifying form fields** using natural language hints. Instead of creating hundreds of variants for every audience combination, use a single catalog with qualifying questions that get auto-answered and skipped when context is available.
 
 ### Route a visitor with a hint (GET — query param)
 
@@ -2595,12 +2647,16 @@ Both `hint`/`hints` and `user_id`/`domain` are accepted.
   "data": {
     "variant_slug": "problem-aware-female",
     "target_slug": "welcome-female-catalog",
-    "reason": "ai_matched"
+    "reason": "ai_matched",
+    "prefill": {
+      "company_size": "11-50",
+      "interest": "social_media"
+    }
   }
 }
 ```
 
-`reason` values: `ai_matched` (LLM picked best match), `weighted_random` (randomly selected by weight), `hybrid_ai` (hybrid mode, LLM picked), `hybrid_random_fallback` (hybrid mode, LLM failed, random pick), `single_variant` (only one variant exists), `no_variants` (catalog has no variants), `fallback` (LLM couldn't decide, returned first variant). `target_slug` is included when the variant routes to a different catalog.
+`reason` values: `ai_matched` (LLM picked best match), `ai_prefill_only` (no variants, only field prefill), `ai_cached` (cached result), `weighted_random` (randomly selected by weight), `hybrid_ai` (hybrid mode, LLM picked), `hybrid_random_fallback` (hybrid mode, LLM failed, random pick), `single_variant` (only one variant exists), `no_variants` (catalog has no variants), `fallback` (LLM couldn't decide, returned first variant). `target_slug` is included when the variant routes to a different catalog. `prefill` is included when AI-prefillable fields were matched from the hint.
 
 ### Frontend hint URLs
 
@@ -2621,7 +2677,70 @@ https://SUBDOMAIN.catalogkit.cc/my-catalog?hint="problem aware male"&silent_redi
 https://SUBDOMAIN.catalogkit.cc/my-catalog/welcome-female-catalog?ref=253
 ```
 
-The frontend holds rendering for up to 400ms while AI routing resolves. If routing completes within that window (typical), visitors see the correct variant catalog directly with no flash. If routing is slow, the base catalog renders first and the variant swaps in when ready.
+The frontend shows a branded loading screen (with optional rotating tips from `settings.loading_tips`) for up to 10 seconds while AI routing and prefill resolve. Once resolved, visitors see the personalized catalog with qualifying pages auto-skipped. If routing fails or times out, the base catalog renders normally.
+
+### AI Prefill — Skip Qualifying Questions
+
+Mark form fields as AI-prefillable to let the hint auto-answer them. Combined with `auto_skip: true` on pages, visitors skip past questions the AI already answered — landing deeper in the funnel instantly.
+
+**Enable AI prefill on a field:**
+
+```json
+{
+  "id": "company_size",
+  "type": "dropdown",
+  "agent_hint": "Number of employees in the company",
+  "ai_prefill": {
+    "enabled": true,
+    "confidence": 0.8,
+    "instructions": "Match to the closest range"
+  },
+  "prefill_mode": "readonly",
+  "props": {
+    "label": "Company Size",
+    "options": [
+      { "value": "1-10", "label": "1-10 employees" },
+      { "value": "11-50", "label": "11-50 employees" },
+      { "value": "51-200", "label": "51-200 employees" },
+      { "value": "201+", "label": "201+ employees" }
+    ]
+  }
+}
+```
+
+**`ai_prefill` config:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `boolean` | — | Opt-in toggle (required) |
+| `confidence` | `number` | `0.7` | Minimum confidence threshold (0-1). The AI assigns a confidence score per field; values below this are discarded |
+| `instructions` | `string` | — | Extra guidance for the AI when filling this specific field (e.g., "Only fill if the hint mentions a specific company name") |
+
+**How it works:**
+
+1. Visitor arrives with `?hint="50-person digital marketing agency interested in social media"`
+2. The API extracts all `ai_prefill.enabled` fields from the catalog schema
+3. A single LLM call handles both variant routing and field prefill
+4. For selection fields (dropdown, multiple_choice, etc.), the AI picks from the exact option values — invalid values are rejected server-side
+5. For free-text fields, the AI only fills when the hint contains a near-exact match (controlled by `instructions` and `confidence`)
+6. Prefilled values merge into form state with priority: `default_value` < `AI prefill` < `URL params` (explicit always wins)
+7. Pages with `auto_skip: true` are skipped when all visible fields have values
+
+**Works without variants too.** A catalog with zero variants but AI-prefillable fields will still process the hint and prefill qualifying questions — no variant setup required.
+
+**Loading tips:** Add `loading_tips` to your catalog settings to show rotating tips/messages during the AI loading screen:
+
+```json
+{
+  "settings": {
+    "loading_tips": [
+      "We're personalizing your experience...",
+      "Finding the best options for you",
+      "Almost ready!"
+    ]
+  }
+}
+```
 
 ---
 
