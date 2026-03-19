@@ -2687,6 +2687,14 @@ Example: `https://yoursubdomain.catalogkit.cc/your-catalog?debug_mode=verbose`
 
 Author catalogs as `.ts` files with full type safety, then push via CLI. This is the recommended workflow for AI agents — it's easier to read, write, and diff than raw JSON.
 
+### Setup
+
+Install the types package for full editor type-checking and autocomplete:
+
+```bash
+npm install --save-dev @officexapp/catalog-types
+```
+
 ### How it works
 
 1. **Create a `.ts` file** that exports a `CatalogSchema` object as the default export
@@ -2695,7 +2703,7 @@ Author catalogs as `.ts` files with full type safety, then push via CLI. This is
 ### Example catalog.ts
 
 ```typescript
-import { CatalogSchema } from "@officexapp/catalogs-cli/types";
+import { CatalogSchema } from "@officexapp/catalog-types";
 
 const catalog: CatalogSchema = {
   name: "Spring Sale Landing Page",
@@ -2723,7 +2731,7 @@ export default catalog;
 
 ### Key points
 
-- **Import types** from `@officexapp/catalogs-cli/types` for `CatalogSchema`, component types, etc.
+- **Import types** from `@officexapp/catalog-types` for `CatalogSchema`, component types, etc.
 - **Functions are auto-serialized** — you can write hooks (`on_enter`, `on_change`, `beforenext`) as real functions in TS. The CLI serializes them to strings for the JSON schema.
 - **Default export** — the CLI expects `export default catalog` (or any default export of a `CatalogSchema` object).
 - **No need to JSON.stringify** — the CLI handles the entire TS → JSON → API upload pipeline.
