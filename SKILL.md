@@ -2245,6 +2245,23 @@ Trigger popups based on visitor behavior:
 
 **Trigger types:** `exit_intent`, `scroll_depth`, `inactive`, `timed`, `page_count`, `custom`, `video_progress`, `video_chapter`
 
+### Page Transitions
+
+Control the animation style and scroll behavior when navigating between pages:
+
+```jsonc
+{
+  "settings": {
+    "page_transition": "slide-up",  // "slide-up" | "fade" | "slide-left" | "scale" | "none"
+    "page_scroll": "instant"        // "instant" | "smooth"
+  }
+}
+```
+
+**Transitions:** `slide-up` (default — fade + slide up), `fade` (opacity only), `slide-left` (slide from right, wizard feel), `scale` (subtle zoom in), `none` (instant swap).
+
+**Scroll:** `instant` (default — jump to top) or `smooth` (animated scroll to top).
+
 ### Completion Screen
 
 Customize what visitors see after submitting:
