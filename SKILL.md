@@ -2340,6 +2340,10 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | `kit.goBack()` | Go to previous page |
 | **Component props** | |
 | `kit.setComponentProp(id, prop, value)` | Override any component prop at runtime (e.g. `hidden`, `label`, `options`). Works on ALL component types — display and input alike |
+| **Cart** | |
+| `kit.openCart()` | Open the cart drawer programmatically |
+| `kit.closeCart()` | Close the cart drawer |
+| `kit.getCartItems()` | Get a frozen array of current cart items |
 | **Events** | |
 | `kit.on(event, callback)` | Subscribe to lifecycle events (see Events section below) |
 | `kit.off(event, callback)` | Unsubscribe |
@@ -2357,6 +2361,11 @@ Events follow the pattern `event` or `event:scope_id`. Unscoped listeners fire f
 | `pageexit` | page ID | `{ pageId }` | Yes | About to leave page (after beforenext) |
 | `beforenext` | page ID | `{ pageId, preventDefault(), setNextPage(id) }` | Yes | After validation, before navigation — can block or redirect |
 | `submit` | page ID | `{ pageId, formState, preventDefault() }` | Yes | Final page submission — can block |
+| `cart_add` | — | `{ item, items }` | No | Offer added to cart |
+| `cart_remove` | — | `{ offer_id, items }` | No | Offer removed from cart |
+| `cart_open` | — | `{ items }` | No | Cart drawer opened |
+| `cart_close` | — | `{ items }` | No | Cart drawer closed |
+| `before_checkout` | — | `{ items, preventDefault() }` | Yes | Before checkout — can block or redirect |
 
 **Scoping examples:**
 
@@ -2729,6 +2738,8 @@ Install the CLI from npm:
 npm install -g @officexapp/catalogs-cli
 ```
 
+> **Node.js requirement:** Node 18–22 (LTS recommended). Node 24+ is **not supported** — it breaks the `tsx` ESM loader hooks used to load TypeScript catalog files at runtime. We recommend **Node 20 or 22 LTS**. The CLI enforces this at startup — if your Node version is outside the 18–22 range it will refuse to run and print instructions to install a compatible version via [NVM](https://github.com/nvm-sh/nvm).
+
 ### Configuration
 
 The CLI requires an **explicit** auth token — it will never silently pick up tokens from config files or `.env` files. This prevents accidentally operating on the wrong account.
@@ -2800,7 +2811,39 @@ catalogs catalog dev my-catalog.ts
 
 No token required — `dev` mode is purely local. Edit your catalog file and save — the browser auto-refreshes via SSE.
 
-**Dev server features:** production-quality rendering with shared engine (conditions/routing/validation identical to prod), auto-reload on save, form validation with error UI, page actions (primary/secondary/danger/ghost), prefill & default values, auto-skip pages, browser history (pushState/popstate), localStorage session persistence with resume prompt, full cart UI with customizable settings, sticky bottom bar (with secondary actions and `field:` dispatch), `__variants` resolution, CatalogKit scripting API (`window.CatalogKit`) with inline `<script>` execution in `html` components, video watch tracking, 22+ input types, 20+ display component types, pages mindmap, element inspector (Shift+Alt), conditional routing, local Stripe checkout, local dev events.
+**Dev server features:**
+- **Production-quality rendering** — uses the same fonts (Outfit + DM Sans), CSS classes (`.cf-*`), and component styling as the live site
+- **Shared engine** — conditions, routing, and validation use the exact same code as production (inlined at build time from `shared/engine/`), eliminating dev/prod divergence
+- **Auto-reload** — browser refreshes automatically when you save your catalog file (SSE-based, no manual refresh needed)
+- **Cover page layouts** — dark gradient overlay with floating content animation, matching production exactly
+- **Interactive form state** — inputs maintain state, conditional routing works based on form values
+- **Form validation** — `validatePage()` runs before advancing: required fields, email/URL/number format, min/max constraints. Red border + error message on invalid fields, auto-scroll to first error
+- **Page actions** — `page.actions` render as styled buttons (primary, secondary, danger, ghost) with icon, side_statement, and reassurance support. Actions validate, set `__action_{pageId}` in formState, check offer acceptance, and route to next page
+- **Prefill & default values** — `default_value` on components initializes formState on mount. URL param prefill via `settings.url_params.prefill_mappings`. `prefill_mode: "hidden"` hides prefilled fields; `prefill_mode: "readonly"` renders them as display-only text
+- **Auto-skip pages** — pages with `auto_skip: true` are skipped (via `replaceState`) when all visible required inputs already have values
+- **Browser history** — pushState/popstate integration: browser back button returns to previous page, auto-skip uses replaceState to stay invisible in history
+- **Session persistence** — formState, currentPageId, and history are saved to localStorage (keyed by catalog slug). On return, a "Resume" / "Start Over" prompt appears if the user left mid-funnel. Cleared on submission
+- **Cart & offers** — full cart UI (floating button + slide-out drawer) that collects page offers via `accept_field`/`accept_value`. Cart persists across pages, items can be removed
+- **Cart settings** — `settings.cart`: `position` (4 corners), `hide_button`, `title`, `checkout_button_text`, `checkout_url` (external redirect)
+- **Sticky bottom bar** — `settings.sticky_bar` or `page.sticky_bar`: delay, scroll direction show/hide, template interpolation (`{{fieldId}}`), style variants (solid, glass, glass_dark, gradient), primary action dispatch, secondary actions, `field:<id>:<value>` dispatch
+- **`__variants` resolution** — `*__variants` keys on component props and actions are resolved against hints (from `catalog.hints.defaults` + URL `?variant=slug`). Highest-scoring condition match wins
+- **CatalogKit scripting API** — `window.CatalogKit` exposes `getField`, `setField`, `getPageId`, `goNext`, `goBack`, `on`/`off` event listeners (`pageenter`, `pageexit`, `fieldchange`, etc.), and `setValidationError`. Inline `<script>` tags in `html` components are executed via `new Function()` (fingerprinted to avoid re-execution on re-renders)
+- **Video watch tracking** — native `<video>` elements report `watch_percent` via `timeupdate`. Pages with `require_watch_percent` block navigation until the threshold is met
+- **Hidden components respected** — components with `hidden: true` (at component level or `props.hidden`) are properly excluded from rendering, matching production behavior
+- **Visibility conditions** — components with `visibility` condition groups are live-evaluated against formState and URL params (all 13 operators supported)
+- **Page navigator** — click "Pages" in the dev banner to see a visual mindmap of all pages and routing edges, click any node to jump there
+- **Element inspector** — hold Shift+Alt to hover any component and click to copy its `pageId/componentId` reference (for AI agents)
+- **Dev banner** — always visible at top showing slug, checkout mode (live test or stubbed), events status, pages mindmap link, debug toggle, and validation status
+- **Debug panel** — click "Debug" in the dev banner or press `Ctrl+D` to toggle; shows current page, live formState JSON, cart items, routing edges from current page, and last 8 dev events
+- **Validation overlay** — validation errors and warnings appear in a dropdown in the dev banner, reappears on hot reload, dismissible
+- **Routing** — conditional page routing works locally using the shared engine (supports all operators, condition groups, edge priority, default edges)
+- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions locally via Stripe REST API. Supports subscriptions, trials, promo codes, customer email prefill, and `stripe_price_id` references. Falls back to informative stub with payload preview when no key found
+- **Local dev events** — page views, field changes, and checkout events stream to your terminal and broadcast via SSE at `/__dev_events_stream`. AI agents can subscribe. Recent events available as JSON at `GET /__dev_events?limit=50`. Zero production pollution
+
+**Dev Preview Feature Parity:**
+- **Supported component types (inputs):** short_text, long_text, email, phone, url, number, password, dropdown, multiple_choice, checkboxes, picture_choice, slider, star_rating, switch/checkbox, opinion_scale, date, datetime, time, date_range, address, currency, file_upload (stubbed), signature (stubbed)
+- **Supported component types (display):** heading, paragraph, image, video, html, banner, callout, divider, pricing_card, testimonial, faq, accordion, timeline, file_download, iframe, table, social_links, tabs, countdown, comparison_table, progress_bar, modal
+- **Prod-only features** (not in dev preview): popup/overlay modals with embedded inputs, quiz scoring & reveal, full analytics pipeline, AI prefill, EVM/Solana/Bitcoin address inputs, custom components via `window.__catalogkit_components`
 
 ### Local file references
 
@@ -2882,10 +2925,12 @@ my-project/
 
 | Feature | Dev mode | Production |
 |---|---|---|
-| Stripe checkout | Stubbed (visual indicator) | Live |
-| Analytics/events | Disabled | Enabled |
+| Stripe checkout | Live (test key) if `STRIPE_SECRET_KEY` in `.env`, otherwise stubbed with payload preview | Live |
+| Events | Local only — terminal + SSE stream (`/__dev_events_stream`) | Production analytics |
 | File serving | Local filesystem | CDN (CloudFront) |
-| Hot reload | On file save | N/A |
+| Hot reload | On file save (SSE) | N/A |
+| Debug panel | `Ctrl+D` — formState, cart, routing, events | N/A |
+| Validation | Live overlay in dev banner | N/A |
 
 ---
 
@@ -3259,13 +3304,20 @@ Define an `offer` on any page. When the visitor's form field matches the `accept
     "id": "growth-bundle",
     "title": "Growth Bundle",
     "price_display": "$49/mo",
-    "stripe_price_id": "price_...",
+    "stripe_price_id": "price_...",   // Use a Stripe Price ID...
+    // OR use inline pricing (no pre-configured Stripe price needed):
+    // "amount_cents": 4900,          // $49.00
+    // "currency": "usd",             // default: "usd"
+    // "payment_type": "subscription", // "one_time" | "subscription" | "pay_what_you_want"
+    // "interval": "month",           // for subscriptions: "day" | "week" | "month" | "year"
     "image": "https://...",
     "accept_field": "offer_choice",     // Component ID to watch
     "accept_value": "accept"            // Value that triggers add-to-cart
   }
 }
 ```
+
+**IMPORTANT:** Every offer that goes through Stripe checkout must have either `stripe_price_id` (a pre-configured Stripe Price) OR `amount_cents` (inline pricing). Without one of these, checkout will fail with a "Missing required param" error. Use `price_display` for the human-readable price shown in the UI.
 
 Cart items accumulate across pages — each page can present a different offer (e.g., main product on page 1, upsell on page 2, order bump on page 3). All accepted offers become Stripe Checkout line items.
 
@@ -3289,9 +3341,75 @@ Cart items support an optional `button` that renders as a side link next to the 
 
 Stripe hosted checkout is the default, but you can also redirect to: Polar.sh, LemonSqueezy, Gumroad, or any custom URL.
 
-### Cart events
+### Cart customization (`settings.cart`)
+
+Customize the floating cart button, slide-out drawer, and checkout flow. All HTML fields support `{{field_id}}` template interpolation.
+
+```jsonc
+{
+  "settings": {
+    "cart": {
+      // Config
+      "icon": "bag",                           // "cart" (default) | "bag" | "basket" | image URL
+      "title": "Your Selection",               // Drawer title (default: "Your Cart")
+      "checkout_button_text": "Complete Order", // Override "Proceed to Checkout" text
+      "checkout_url": "https://pay.example.com?email={{email}}", // External URL (skips built-in checkout)
+      "position": "bottom-left",               // "bottom-right" (default) | "bottom-left" | "top-right" | "top-left"
+      "hide_button": false,                    // Hide floating button (use kit.openCart() to open programmatically)
+
+      // HTML/CSS slots
+      "header_html": "<div class='my-header'>Custom Header</div>",  // Replaces default header
+      "footer_html": "<p>30-day money-back guarantee</p>",          // Inserted above checkout button
+      "empty_html": "<p>Browse our offers to get started</p>",      // Replaces default empty state
+      "css": ".ck-cart-drawer { border-radius: 16px; } .ck-cart-checkout-btn { background: linear-gradient(135deg, #667eea, #764ba2) !important; }"
+    }
+  }
+}
+```
+
+**CSS class hooks** for external styling: `.ck-cart-drawer`, `.ck-cart-header`, `.ck-cart-empty`, `.ck-cart-item[data-offer-id="..."]`, `.ck-cart-footer`, `.ck-cart-footer-custom`, `.ck-cart-checkout-btn`.
+
+**Icon presets:**
+| Preset | Description |
+|--------|-------------|
+| `"cart"` | Shopping cart (default) |
+| `"bag"` | Shopping bag |
+| `"basket"` | Shopping basket |
+| `"https://..."` | Custom image URL |
+
+### Cart events (analytics + JS)
 
 The following events are tracked automatically: `cart_add`, `cart_remove`, `checkout_start`, `checkout_skip`, `checkout_complete`.
+
+**JavaScript events** via `window.CatalogKit`:
+
+| Event | Payload | Cancelable | Description |
+|-------|---------|------------|-------------|
+| `cart_add` | `{ item, items }` | No | An offer was added to the cart |
+| `cart_remove` | `{ offer_id, items }` | No | An offer was removed from the cart |
+| `cart_open` | `{ items }` | No | Cart drawer opened |
+| `cart_close` | `{ items }` | No | Cart drawer closed |
+| `before_checkout` | `{ items, preventDefault() }` | Yes | Fires before checkout — call `preventDefault()` to cancel and handle yourself |
+
+```javascript
+const kit = window.CatalogKit.get();
+
+// Track cart additions
+kit.on('cart_add', (e) => {
+  console.log('Added:', e.item.title, 'Total items:', e.items.length);
+});
+
+// Intercept checkout — redirect to external payment
+kit.on('before_checkout', (e) => {
+  e.preventDefault();
+  window.location.href = 'https://my-custom-checkout.com?items=' + e.items.length;
+});
+
+// Programmatic cart control
+kit.openCart();    // Open the cart drawer
+kit.closeCart();   // Close the cart drawer
+kit.getCartItems(); // Get frozen array of current cart items
+```
 
 ---
 
