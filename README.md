@@ -18,7 +18,6 @@ A SKILL.md is a structured documentation file that AI agents (like Claude, ChatG
 
 ## Also available as
 
-- [`npx skills add OfficeXApp/quiz-funnels`](https://github.com/OfficeXApp/quiz-funnels) — [officex.app/store/en/app/quiz-funnels](https://officex.app/store/en/app/quiz-funnels)
 
 ## Usage
 
