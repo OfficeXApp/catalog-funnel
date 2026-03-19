@@ -2800,7 +2800,7 @@ catalogs catalog dev my-catalog.ts
 
 No token required — `dev` mode is purely local. Edit your catalog file and save — the browser auto-refreshes via SSE.
 
-**Dev server features:** production-quality rendering with shared engine (conditions/routing/validation identical to prod), auto-reload on save, form validation with error UI, page actions (primary/secondary/danger/ghost), prefill & default values, auto-skip pages, browser history (pushState/popstate), localStorage session persistence with resume prompt, full cart UI with customizable settings, sticky bottom bar, `__variants` resolution, CatalogKit scripting API (`window.CatalogKit`), video watch tracking, 22+ input types, 20+ display component types, pages mindmap, element inspector (Shift+Alt), conditional routing, local Stripe checkout, local dev events.
+**Dev server features:** production-quality rendering with shared engine (conditions/routing/validation identical to prod), auto-reload on save, form validation with error UI, page actions (primary/secondary/danger/ghost), prefill & default values, auto-skip pages, browser history (pushState/popstate), localStorage session persistence with resume prompt, full cart UI with customizable settings, sticky bottom bar (with secondary actions and `field:` dispatch), `__variants` resolution, CatalogKit scripting API (`window.CatalogKit`) with inline `<script>` execution in `html` components, video watch tracking, 22+ input types, 20+ display component types, pages mindmap, element inspector (Shift+Alt), conditional routing, local Stripe checkout, local dev events.
 
 ### Local file references
 
