@@ -989,6 +989,8 @@ A catalog schema defines your entire funnel as JSON. Here's a minimal lead captu
 }
 ```
 
+**Reserved page IDs:** Do not use `checkout`, `__checkout`, `__global`, `submitted`, or `__submitted` as page IDs — these are reserved for CatalogKit's built-in checkout, inspector, and submission systems. Avoid `__`-prefixed IDs in general. The CLI `catalog validate` command checks for this.
+
 ### Theme
 
 Set theme options under `settings.theme`:
@@ -2202,54 +2204,6 @@ Each item in the `inputs` array has these fields:
 | `inputs` | array | Nested sub-components — always visible by default, auto-checks when required inputs filled |
 | `expand_on_select` | boolean | When `true`, nested inputs only show after checkbox is checked (no auto-check). Default: `false` |
 
-### Top Bar
-
-The fixed top bar supports navigation, branding, announcements, and countdowns via `settings.top_bar`.
-
-> **Important:** `title` and `announcement` are **separate fields** — do NOT confuse them.
-> - `title` — a **string** displayed as centered text in the nav bar row (same row as back button / progress)
-> - `announcement` — an **object** that renders a colored banner strip **above** the nav row
-
-```jsonc
-{
-  "settings": {
-    "top_bar": {
-      "enabled": true,             // false = hide entirely
-      "show_back_button": true,    // false = hide back nav
-      "show_progress": true,       // false = hide stepper/progress bar
-      "title": "My Brand",         // centered text IN the nav row (string)
-      "title_weight": "medium",    // "light" | "normal" | "medium" (default) | "semibold" | "bold"
-      "announcement": {            // colored banner strip ABOVE the nav row (object)
-        "text": "Free shipping on orders over $50!",
-        "bg_color": "#e53e3e",     // default: theme color
-        "text_color": "#ffffff",   // default: white
-        "html": "<b>SALE</b> — Use code <code>SAVE20</code>"  // overrides text if set
-      },
-      "countdown": {               // optional countdown timer (replaces progress indicator)
-        "target_date": "2026-04-01T00:00:00Z",
-        "label": "LAUNCH PRICE ENDS IN",
-        "expired_text": "OFFER EXPIRED"
-      },
-      "custom_html": "<div>...</div>",  // raw HTML replaces all default nav row content
-      "className": "",                   // extra CSS classes on the container
-      "style": {}                        // inline style overrides
-    }
-  }
-}
-```
-
-| Config | Effect |
-|---|---|
-| Omitted / `{}` | Default — stepper or progress bar + back button |
-| `{ enabled: false }` | Top bar hidden entirely, content moves up |
-| `{ title: "Brand", title_weight: "light" }` | Centered title with light font weight |
-| `{ announcement: { text: "..." } }` | Colored banner strip above nav row |
-| `{ countdown: {...} }` | Countdown timer replaces progress indicator |
-| `{ custom_html: "..." }` | Raw HTML replaces all default content in nav row |
-| `{ show_progress: false }` | Top bar visible (for back button) but no progress |
-
-Page content padding adjusts dynamically based on the actual top bar height — announcements, custom HTML, and other content won't overlap.
-
 ### Progress Line
 
 Add a thin progress line at the top of the viewport (like Fillout.com) that fills as the visitor progresses:
@@ -2414,8 +2368,9 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | `kit.addDisplayItem(item)` | Programmatically add an arbitrary `CartItem` to the visual cart (no page-offer required, dedupes by `offer_id`). Item needs at minimum `offer_id`, `page_id`, `title` |
 | `kit.removeDisplayItem(offerId)` | Remove an item from the visual cart by `offer_id` |
 | **Payment items** (what actually gets sent to Stripe) | |
-| `kit.setPaymentItems(items)` | Override line items sent to Stripe at checkout. Pass `null` to clear and fall back to display items |
+| `kit.setPaymentItems(items)` | Override line items sent to Stripe at checkout. Pass `null` to clear and fall back to display items. Lets you show a bundled deal in the UI while sending itemized charges to Stripe |
 | `kit.getPaymentItems()` | Get the current Stripe override array, or `null` if using display items |
+| `kit.startCheckout()` | Programmatically trigger the built-in checkout page (fires `before_checkout`, then shows checkout). Use this instead of DOM-clicking the cart checkout button |
 | **Events** | |
 | `kit.on(event, callback)` | Subscribe to lifecycle events (see Events section below) |
 | `kit.off(event, callback)` | Unsubscribe |
@@ -2724,6 +2679,7 @@ When checkboxes have nested inputs (e.g. proof URLs, wallet addresses), you **mu
 | `fieldchange:inputId` listener never fires for nested input | Same cause — bare input ID doesn't match the compound key in form state | Use `kit.on("fieldchange:checkboxId.optionValue.inputId", ...)` |
 | `setValidationError` doesn't display anything | Wrong `componentId` passed — must match the `id` of an input component on the current page | Check the component `id` in your schema matches the first argument |
 | Script doesn't execute | `html` component not on the current page, or `content` prop missing `<script>` tags | Ensure the `html` component is in the page's `components` array and the content is wrapped in `<script>...</script>` |
+| Checkout crashes or behaves differently in prod vs dev | Using DOM manipulation (`document.querySelector`) to click the cart checkout button after `preventDefault()` + `setTimeout` | Use a terminal page (no outgoing routing edges) so checkout triggers automatically, or call `kit.startCheckout()`. See [Triggering Checkout](#triggering-checkout) |
 
 ### Debug mode
 
@@ -3373,6 +3329,7 @@ Configure checkout in `settings.checkout`:
     "checkout": {
       "payment_type": "one_time",             // "one_time" | "subscription" | "pay_what_you_want"
       "title": "Complete Your Order",
+      "subheading": "No commitment. Cancel anytime.", // Optional plain text below the title
       "stripe_publishable_key": "pk_live_...",
 
       // Payment options
@@ -3393,6 +3350,8 @@ Configure checkout in `settings.checkout`:
       "allow_skip": true,                      // Allow "Continue without paying" button (default: true, set false to require payment)
 
       // Appearance
+      "ui_mode": "hosted",                     // "hosted" (redirect) | "embedded" (Stripe embedded checkout)
+                                               // When omitted + stripe_publishable_key is set: inline card fields (default)
       "button_text": "Subscribe Now",
       "testimonial": {
         "enabled": true,
@@ -3441,6 +3400,9 @@ Define an `offer` on any page. When the visitor's form field matches the `accept
     "id": "growth-bundle",
     "title": "Growth Bundle",
     "price_display": "$49/mo",
+    "price_subtext": "/month",          // Gray subtitle below price in cart/checkout.
+    // Auto-derives from interval when omitted (e.g. interval:"month" → "/month").
+    // Set to "" to suppress entirely. Use any string to override (e.g. "per year", "billed annually").
     "stripe_price_id": "price_...",   // Use a Stripe Price ID...
     // OR use inline pricing (no pre-configured Stripe price needed):
     // "amount_cents": 4900,          // $49.00
@@ -3455,6 +3417,24 @@ Define an `offer` on any page. When the visitor's form field matches the `accept
 ```
 
 **IMPORTANT:** Every offer that goes through Stripe checkout must have either `stripe_price_id` (a pre-configured Stripe Price) OR `amount_cents` (inline pricing). Without one of these, checkout will fail with a "Missing required param" error. Use `price_display` for the human-readable price shown in the UI.
+
+**`price_subtext`** — the gray subtitle text shown below the price in the cart and checkout order summary (e.g. "/month", "per year", "billed annually"). When omitted, it auto-derives from `interval` (e.g. `interval: "month"` → "/month"). Set to `""` to suppress it entirely.
+
+**Free trial pricing example:** For trial offers, put the main price in `price_display` and the trial info in `price_subtext` so they render on separate lines:
+
+```jsonc
+{
+  "offer": {
+    "price_display": "$30/month",
+    "price_subtext": "7-day free trial included",  // Renders as smaller gray text below the green price
+    "amount_cents": 3000,
+    "payment_type": "subscription",
+    "interval": "month"
+  }
+}
+```
+
+Do NOT combine everything into `price_display` (e.g. `"7-Day Free Trial then $30/month"`) — this prevents the two-line layout and makes the subtext invisible.
 
 Cart items accumulate across pages — each page can present a different offer (e.g., main product on page 1, upsell on page 2, order bump on page 3). All accepted offers become Stripe Checkout line items.
 
@@ -3473,6 +3453,37 @@ Cart items support an optional `button` that renders as a side link next to the 
   }
 }
 ```
+
+### Checkout page layout
+
+The checkout page uses a two-column layout on desktop (single column on mobile):
+
+**Left column:**
+- Order summary (cart items with images, prices, remove buttons)
+- Coupon code input (when `allow_discount_codes` is enabled)
+- Testimonial (when `testimonial.enabled` is true)
+- Custom components (when `components` array is set)
+
+**Right column (sticky):**
+- Item count + trial badge
+- Customer info fields (email, name, phone — from `prefill_fields`)
+- Card input fields (Stripe Elements — when `stripe_publishable_key` is set)
+- Pay button + "Continue without paying" link
+- Error messages
+- 3DS "Extra verification required" notice (when `require_3ds` is true)
+- "Powered by Stripe" badge
+
+### Checkout UI modes
+
+The checkout page supports three payment modes, determined automatically:
+
+| Config | Mode | Behavior |
+|---|---|---|
+| `stripe_publishable_key` set, no `ui_mode` | **Inline card fields** (default) | Stripe Elements CardElement renders in the right column. Payment confirmed client-side via `/checkout/intent` endpoint. Works with test cards. |
+| `stripe_publishable_key` set, `ui_mode: "embedded"` | **Embedded checkout** | Stripe's full embedded checkout UI renders in the right column. Stripe handles all card input and payment. |
+| No `stripe_publishable_key`, or `ui_mode: "hosted"` | **Hosted redirect** | Clicking the pay button redirects to Stripe's hosted checkout page. |
+
+**Inline card fields** is the recommended default for local development and production. It keeps the user on your page, supports 3DS challenges (Stripe handles the popup), and works with all Stripe test cards (`4242 4242 4242 4242`, `4000 0027 6000 3184` for 3DS, etc.).
 
 ### Supported checkout targets
 
@@ -3567,9 +3578,181 @@ kit.startCheckout();                     // Show checkout page (fires before_che
 
 ---
 
+## Triggering Checkout
+
+There are three ways visitors reach the built-in checkout page. Understanding these prevents common anti-patterns.
+
+### 1. Terminal page (recommended for funnels)
+
+When the submit button is clicked on a **terminal page** (a page with no outgoing routing edges) and `settings.checkout` is configured, the built-in checkout page renders automatically. This is the simplest and most reliable approach.
+
+```json
+{
+  "routing": {
+    "entry": "landing",
+    "edges": [
+      { "from": "landing", "to": "offers" },
+      { "from": "offers", "to": "review", "conditions": { "match": "all", "rules": [{ "field": "cart_flag", "operator": "equals", "value": "yes" }] } },
+      { "from": "offers", "to": "end_screen", "is_default": true }
+    ]
+  }
+}
+```
+
+In this example, `review` has **no outgoing edges** — it is terminal. When the visitor clicks "Start Free Trial" on the review page, the platform fires the `submit` event and then shows the checkout page with the full order summary, payment button, and everything from `settings.checkout`.
+
+After payment, `settings.checkout.success_page_id` routes the visitor to your thank-you page (e.g. `"success_page_id": "end_screen"`).
+
+### 2. Cart checkout button
+
+Visitors can always click the floating cart button → open the cart drawer → click "Proceed to Checkout". This triggers the `before_checkout` event and then shows the checkout page. No configuration needed beyond `settings.checkout`.
+
+### 3. Programmatic via `kit.startCheckout()`
+
+For custom buttons or script-driven flows, call `kit.startCheckout()` to show the checkout page programmatically:
+
+```json
+{
+  "id": "custom_checkout_btn",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\ndocument.getElementById('my_pay_btn').addEventListener('click', () => {\n  kit.startCheckout();\n});\n</script>\n<button id=\"my_pay_btn\" style=\"padding:12px 24px;background:#16a34a;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;\">Pay Now</button>"
+  }
+}
+```
+
+This fires `before_checkout` (cancelable), then shows the built-in checkout page — identical to clicking the cart checkout button, but without requiring the cart drawer to be open.
+
+### Common anti-pattern: DOM-clicking the cart checkout button
+
+**Do NOT** intercept `beforenext`, prevent navigation, open the cart, and `setTimeout` + `document.querySelector` to click the cart checkout button. This creates race conditions between React state updates and DOM manipulation, causing crashes in production. Use one of the three methods above instead.
+
+```javascript
+// ❌ WRONG — fragile DOM hack, causes race conditions and crashes
+kit.on('beforenext:review', (e) => {
+  e.preventDefault();
+  kit.openCart();
+  setTimeout(() => {
+    document.querySelector('.ck-cart-checkout-btn').click(); // DON'T DO THIS
+  }, 300);
+});
+
+// ✅ CORRECT — make review a terminal page (no outgoing edges)
+// The platform auto-shows checkout when the submit button is clicked
+
+// ✅ ALSO CORRECT — trigger checkout from a script
+kit.startCheckout();
+```
+
+### Recipe: Review page before checkout
+
+A common pattern is showing a summary/review page before payment. Here is the recommended approach:
+
+1. **Create a review page** with your summary content (headings, callouts, guarantees)
+2. **Do NOT add routing edges from the review page** — make it terminal
+3. **Set the submit button label** to your CTA (e.g. `"submit_label": "Start Free Trial"`)
+4. **Configure `settings.checkout`** with your payment settings, components, testimonial, and disclaimer
+
+```typescript
+// Review page — terminal (no outgoing edges)
+pages["review"] = {
+  title: "Start Your 7-Day Trial",
+  components: [
+    { id: "summary_heading", type: "heading", props: { text: "Review Your Order", level: 1, align: "center" } },
+    { id: "guarantee", type: "callout", props: { style: "success", title: "90-Day Guarantee", text: "If you don't see value, we'll refund you." } },
+  ],
+  submit_label: "Start Free Trial",
+  submit_reassurance: "Cancel anytime. 90-day money-back guarantee.",
+};
+
+// Routing — review is terminal, no edge FROM review
+edges: [
+  { from: "last_offer", to: "review", conditions: { match: "all", rules: [{ field: "cart_flag", operator: "equals", value: "yes" }] } },
+  { from: "last_offer", to: "end_screen", is_default: true },
+  // NO edge from "review" — this makes it terminal
+]
+
+// settings.checkout handles the rest
+settings: {
+  checkout: {
+    payment_type: "subscription",
+    success_page_id: "end_screen",
+    title: "Complete Your Order",
+    button_text: "Start Free Trial",
+    // ... 3DS, trial, components, testimonial, disclaimer
+  }
+}
+```
+
+When the visitor clicks "Start Free Trial" on the review page → platform auto-shows the built-in checkout with order summary → Stripe payment → redirects to `end_screen`.
+
+To redirect visitors who click the cart checkout button from other pages to the review page first, use `before_checkout`:
+
+```javascript
+const kit = window.CatalogKit.get();
+kit.on('before_checkout', (e) => {
+  if (kit.getPageId() !== 'review') {
+    e.preventDefault();
+    kit.closeCart();
+    kit.goToPage('review');
+  }
+  // On review page, let startCheckout/terminal-page flow handle it
+});
+```
+
+---
+
 ## Checkout — 3D Secure & Trial Protection
 
-Catalog Kit supports advanced Stripe checkout features for protecting free trial funnels from payment failures and chargebacks.
+Catalog Kit supports advanced Stripe checkout features for protecting free trial funnels from payment failures and chargebacks. The system uses **two API endpoints** — one for hosted/embedded Stripe Checkout Sessions, and one for inline card-element payments via Stripe Elements.
+
+### Checkout intent strategy (`/checkout/intent`)
+
+When using inline card fields (the default when `stripe_publishable_key` is set), the frontend calls `POST /checkout/intent` to create a Stripe PaymentIntent or SetupIntent. The strategy is **derived from your checkout config** — no explicit mode parameter needed:
+
+| Checkout config | Intent type | What happens |
+|---|---|---|
+| Default (no overrides) | PaymentIntent, auto capture | Simple one-time charge |
+| `setup_future_usage: "off_session"` | PaymentIntent + saves card | Charge now, reuse card for future payments |
+| `capture_method: "manual"` | PaymentIntent, auth-only hold | Hold funds on card, capture later via webhook |
+| `free_trial.enabled` (no hold) | **SetupIntent** | Verify card + 3DS, $0 charge, save for later |
+| `free_trial.enabled` + `capture_method: "manual"` | PaymentIntent, manual capture + off_session | **3DS + hold + save card** for post-trial billing |
+
+The endpoint reads `stripe_overrides.payment_intent_data` for `capture_method` and `setup_future_usage`, then composes the right intent. Simple catalogs with no overrides get a simple PaymentIntent. Complex flows layer on config — not modes.
+
+**Request:**
+```
+POST https://api.catalogkit.cc/checkout/intent
+Authorization: Bearer <api_key>
+```
+
+```json
+{
+  "user_id": "usr_...",
+  "catalog_slug": "my-catalog",
+  "tracer_id": "trc_...",
+  "line_items": [
+    { "offer_id": "pro-plan", "title": "Pro Plan", "amount_cents": 4900, "currency": "usd", "payment_type": "subscription", "interval": "month", "quantity": 1 }
+  ],
+  "form_state": { "comp_email": "user@example.com" }
+}
+```
+
+**Response:**
+```json
+{
+  "client_secret": "pi_xxx_secret_yyy",
+  "intent_type": "payment",
+  "customer_id": "cus_...",
+  "capture_method": "manual"
+}
+```
+
+The frontend uses `intent_type` to call either `stripe.confirmCardPayment()` or `stripe.confirmCardSetup()` with the Stripe CardElement.
+
+### Checkout session (`/checkout/session`)
+
+The original endpoint — creates a Stripe Checkout Session for hosted redirect or embedded checkout. Still used when `ui_mode: "hosted"` or `ui_mode: "embedded"` is explicitly set.
 
 ### 3D Secure Verification
 
@@ -3588,7 +3771,9 @@ Force bank-level authentication (OTP, biometric, bank app) on every card payment
 }
 ```
 
-When enabled, the Stripe Checkout session includes `payment_method_options.card.request_three_d_secure: "any"`. The frontend shows a "3D Secure Checkout" header badge and a blue explainer banner telling the user their bank will ask for verification. Button text defaults to "Start Free Trial" when a trial is active.
+When enabled, the intent includes `payment_method_options.card.request_three_d_secure: "any"`. The frontend shows a "3D Secure Checkout" header badge and a blue explainer banner (in the right column, below the pay button) telling the user their bank will ask for verification. Button text defaults to "Start Free Trial" when a trial is active.
+
+With inline card fields, 3DS challenges appear as a Stripe-managed popup over your page — the user never leaves your checkout.
 
 ### Trial End Behavior
 
@@ -3604,14 +3789,13 @@ Recommended combo: `require_3ds: true` + `trial_end_behavior: "cancel"` — veri
 
 ### Stripe Overrides (Advanced Pass-Through)
 
-For flows beyond what `require_3ds` and `trial_end_behavior` cover, use `stripe_overrides` to pass Stripe params directly through the checkout session. Your billing server handles the lifecycle via Stripe webhooks.
+Use `stripe_overrides` to control Stripe behavior. These apply to both the `/checkout/session` (Checkout Sessions) and `/checkout/intent` (PaymentIntent/SetupIntent) endpoints.
 
 ```jsonc
 {
   "settings": {
     "checkout": {
       "stripe_overrides": {
-        "mode_override": "payment",
         "payment_intent_data": {
           "capture_method": "manual",
           "setup_future_usage": "off_session",
@@ -3623,21 +3807,69 @@ For flows beyond what `require_3ds` and `trial_end_behavior` cover, use `stripe_
 }
 ```
 
-**Available overrides:** `mode_override` (force session mode), `payment_intent_data` (capture_method, setup_future_usage, statement_descriptor, transfer_data), `subscription_data` (description, metadata), `consent_collection` (terms_of_service, promotions).
+**Available overrides:** `mode_override` (force Checkout Session mode — only applies to `/checkout/session`), `payment_intent_data` (capture_method, setup_future_usage, statement_descriptor, transfer_data), `subscription_data` (description, metadata), `consent_collection` (terms_of_service, promotions), `payment_method_options.card` (capture_method, request_three_d_secure).
 
-When `mode_override: "payment"` is set for subscription items, Catalog Kit automatically strips recurring pricing from inline items. Use `amount_cents` instead of `stripe_price_id` for recurring prices in payment mode.
+When `mode_override: "payment"` is set for subscription items in Checkout Session mode, Catalog Kit automatically strips recurring pricing from inline items. Use `amount_cents` instead of `stripe_price_id` for recurring prices in payment mode.
 
 ### Bring Your Own Billing Server
 
-Catalog Kit handles the checkout funnel (session creation, 3DS, overrides) but does **not** manage post-payment lifecycle. Stripe webhooks are server-to-server and independent of the `catalogkit.cc` redirect URLs — configure them in your Stripe Dashboard to point at your own server.
+Catalog Kit handles the checkout funnel (intent creation, 3DS, overrides) but does **not** manage post-payment lifecycle. Stripe webhooks are server-to-server and independent of the `catalogkit.cc` redirect URLs — configure them in your Stripe Dashboard to point at your own server.
 
 **Setup:**
 1. Stripe Dashboard → Developers → Webhooks → add your endpoint
-2. Subscribe to: `checkout.session.completed`, `payment_intent.amount_capturable_updated`, `invoice.payment_failed`, etc.
+2. Subscribe to events based on your flow:
+   - Simple payment: `payment_intent.succeeded`
+   - Hold + capture: `payment_intent.amount_capturable_updated`, `payment_intent.succeeded`
+   - SetupIntent (trial): `setup_intent.succeeded`
+   - Checkout Session: `checkout.session.completed`
+   - Failures: `payment_intent.payment_failed`, `invoice.payment_failed`
 3. Your server uses the same Stripe secret key you provided to Catalog Kit
-4. Every session includes metadata (`catalog_id`, `catalog_slug`, `user_id`, `tracer_id`) for correlation
+4. Every intent includes metadata (`catalog_id`, `catalog_slug`, `user_id`, `tracer_id`, `line_items_json`, `trial_days`) for correlation
 
-### Recipe: Guarded 7-Day Trial (Manual Capture)
+### Recipe: Simple One-Time Payment
+
+No overrides needed. Set up `settings.checkout` and `stripe_publishable_key`, and the checkout page handles everything:
+
+```jsonc
+{
+  "settings": {
+    "checkout": {
+      "payment_type": "one_time",
+      "title": "Complete Your Purchase",
+      "stripe_publishable_key": "pk_test_...",
+      "prefill_fields": { "customer_email": "comp_email" },
+      "button_text": "Pay Now"
+    }
+  }
+}
+```
+
+The visitor enters their card inline, clicks "Pay Now", and the payment is processed immediately. No redirect, no holds, no future usage.
+
+### Recipe: Subscription with Free Trial (No Hold)
+
+Verify the card and save it for post-trial billing, without placing a hold:
+
+```jsonc
+{
+  "settings": {
+    "checkout": {
+      "payment_type": "subscription",
+      "title": "Start Your 14-Day Trial",
+      "stripe_publishable_key": "pk_test_...",
+      "require_3ds": true,
+      "free_trial": { "enabled": true, "days": 14 },
+      "trial_end_behavior": "cancel",
+      "prefill_fields": { "customer_email": "comp_email" },
+      "button_text": "Start Free Trial"
+    }
+  }
+}
+```
+
+This creates a **SetupIntent** — the card is verified via 3DS and saved, but $0 is charged. Your billing server listens for `setup_intent.succeeded` and creates the subscription with the saved payment method.
+
+### Recipe: Guarded 7-Day Trial (Hold + 3DS + Future Preauth)
 
 The most conversion-protective free trial pattern. Instead of a $0 subscription trial, this authorizes the full subscription amount as a "pending" hold on the customer's card, then captures or voids based on trial outcome.
 
@@ -3648,28 +3880,39 @@ The most conversion-protective free trial pattern. Instead of a $0 subscription 
   "settings": {
     "checkout": {
       "payment_type": "subscription",
+      "title": "Start Your 7-Day Trial",
+      "subheading": "Your card will be verified but not charged during the trial.",
+      "stripe_publishable_key": "pk_test_...",
       "require_3ds": true,
+      "free_trial": { "enabled": true, "days": 7 },
       "stripe_overrides": {
-        "mode_override": "payment",
         "payment_intent_data": {
           "capture_method": "manual",
           "setup_future_usage": "off_session"
         }
       },
+      "prefill_fields": { "customer_email": "comp_email" },
+      "button_text": "Start Free Trial",
       "show_disclaimer": true,
-      "disclaimer_text": "A temporary hold for the full subscription amount will appear on your card. This is NOT a charge — it verifies your funds and is released if you cancel during the trial."
+      "disclaimer_text": "A temporary hold for the full subscription amount will appear on your card. This is NOT a charge — it verifies your funds and is released if you cancel during the trial.",
+      "testimonial": {
+        "enabled": true,
+        "text": "Pays for itself with just one customer. Most founders see results within the first week.",
+        "author": "OfficeX Founders"
+      }
     }
   }
 }
 ```
 
-Note: Use `amount_cents` on line items (not `stripe_price_id`) since payment mode can't accept recurring Stripe Prices.
+Note: Use `amount_cents` on line items (not `stripe_price_id`) since the intent needs a concrete amount for the hold.
+
+**What happens under the hood:** The `/checkout/intent` endpoint sees `free_trial.enabled` + `capture_method: "manual"` and creates a PaymentIntent with `capture_method: "manual"` + `setup_future_usage: "off_session"`. The visitor enters their card inline, completes 3DS verification, and the hold is placed — all without leaving your page.
 
 **Step 2 — Your billing server handles the lifecycle:**
 
 ```
-Webhook: checkout.session.completed
-├── Extract payment_intent from session
+Webhook: payment_intent.amount_capturable_updated
 ├── Retrieve PaymentIntent → read latest_charge.payment_method_details.card.capture_before
 ├── Schedule capture at: min(trial_end, capture_before - 1 hour)
 │   ⚠️ Visa often expires at 4d 18h (114 hours), Mastercard/Amex ~7 days
