@@ -3468,6 +3468,7 @@ The checkout page uses a two-column layout on desktop (single column on mobile):
 
 **Left column:**
 - Order summary (cart items with images, prices, remove buttons)
+- Summary lines — tax, total, etc. (when `summary_lines` is set)
 - Coupon code input (when `allow_discount_codes` is enabled)
 - Testimonial (when `testimonial.enabled` is true)
 - Custom components (when `components` array is set)
@@ -3476,10 +3477,61 @@ The checkout page uses a two-column layout on desktop (single column on mobile):
 - Item count + trial badge
 - Customer info fields (email, name, phone — from `prefill_fields`)
 - Card input fields (Stripe Elements — when `stripe_publishable_key` is set)
-- Pay button + "Continue without paying" link
+- Pay button + skip button (when `allow_skip` is true)
 - Error messages
 - 3DS "Extra verification required" notice (when `require_3ds` is true)
 - "Powered by Stripe" badge
+
+### Skip button
+
+The skip button lets visitors continue without paying. It appears below the pay button in both embedded and inline card modes.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `allow_skip` | `boolean` | `true` | Show/hide the skip button. Set `false` to require payment. |
+| `skip_button_text` | `string` | `"Continue without paying"` | Custom text for the skip button. |
+
+```jsonc
+// Example: hide the skip button entirely
+{ "checkout": { "allow_skip": false } }
+
+// Example: customize the skip button text
+{ "checkout": { "skip_button_text": "Maybe later — continue for free" } }
+```
+
+### Order summary lines
+
+Add display-only rows below the cart items in the order summary card. Useful for subtotals, taxes, fees, discounts, or totals. **No calculations are performed** — the editor defines all label and value text exactly as it should appear.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `summary_lines[].label` | `string` | Yes | Left-aligned label (e.g. "Subtotal", "Tax (8%)") |
+| `summary_lines[].value` | `string` | Yes | Right-aligned value (e.g. "$97.00") |
+| `summary_lines[].bold` | `boolean` | No | When `true`, renders the row in bold (use for totals) |
+
+```jsonc
+// Example: subtotal + tax + total
+{
+  "checkout": {
+    "summary_lines": [
+      { "label": "Subtotal", "value": "$97.00" },
+      { "label": "Tax (8%)", "value": "$7.76" },
+      { "label": "Total", "value": "$104.76", "bold": true }
+    ]
+  }
+}
+
+// Example: discount line
+{
+  "checkout": {
+    "summary_lines": [
+      { "label": "Subtotal", "value": "$150.00" },
+      { "label": "Launch Discount", "value": "-$53.00" },
+      { "label": "Total", "value": "$97.00", "bold": true }
+    ]
+  }
+}
+```
 
 ### Checkout UI modes
 
