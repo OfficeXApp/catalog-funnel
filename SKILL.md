@@ -37,7 +37,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Scaffold catalogs** — `catalogs catalog init` creates a new catalog from a template (quiz-funnel, lead-capture, product-catalog, blank)
 - **Diff against remote** — `catalogs catalog diff my-catalog.ts` shows structural changes vs the deployed version
 - **Open in browser** — `catalogs catalog open my-slug` opens the published catalog URL in your default browser
-- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions locally. Keys never leave your machine
+- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions and inline card fields locally. Keys never leave your machine
 - **Local dev events** — page views, field changes, and checkout events stream to your terminal and an SSE endpoint (`/__dev_events_stream`) that AI agents can subscribe to. Zero production pollution
 - **Custom JavaScript** — inject custom client-side logic via `html` components with `<script>` tags and the `window.CatalogKit` API bridge
 - **Custom HTML components** — render arbitrary HTML/CSS/JS inside catalogs using `type: "html"` components
@@ -2407,10 +2407,15 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | `kit.goToPage(pageId)` | Navigate directly to any page by ID (adds current page to history, no validation) |
 | **Component props** | |
 | `kit.setComponentProp(id, prop, value)` | Override any component prop at runtime (e.g. `hidden`, `label`, `options`). Works on ALL component types — display and input alike |
-| **Cart** | |
+| **Display cart** (visual UI: drawer, badges, order summary) | |
 | `kit.openCart()` | Open the cart drawer programmatically |
 | `kit.closeCart()` | Close the cart drawer |
-| `kit.getCartItems()` | Get a frozen array of current cart items |
+| `kit.getDisplayItems()` | Get a frozen array of items shown in the cart UI |
+| `kit.addDisplayItem(item)` | Programmatically add an arbitrary `CartItem` to the visual cart (no page-offer required, dedupes by `offer_id`). Item needs at minimum `offer_id`, `page_id`, `title` |
+| `kit.removeDisplayItem(offerId)` | Remove an item from the visual cart by `offer_id` |
+| **Payment items** (what actually gets sent to Stripe) | |
+| `kit.setPaymentItems(items)` | Override line items sent to Stripe at checkout. Pass `null` to clear and fall back to display items |
+| `kit.getPaymentItems()` | Get the current Stripe override array, or `null` if using display items |
 | **Events** | |
 | `kit.on(event, callback)` | Subscribe to lifecycle events (see Events section below) |
 | `kit.off(event, callback)` | Unsubscribe |
@@ -2915,7 +2920,7 @@ No token required — `dev` mode is purely local. Edit your catalog file and sav
 - **Production link** — "Prod" link in toolbar opens the published catalog URL in a new tab. URL is auto-resolved from: (1) catalog's `url` field, (2) subdomain-based URL (`https://{subdomain}.catalogkit.cc/{slug}`), (3) fallback `https://catalogkit.cc/c/{catalog_id}`. Shows as gray/disabled when catalog isn't published yet
 - **Validation overlay** — validation errors and warnings appear in a fixed overlay at bottom-left, reappears on hot reload, dismissible via close button
 - **Routing** — conditional page routing works locally using the shared engine (supports all operators, condition groups, edge priority, default edges)
-- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions locally via Stripe REST API. Supports subscriptions, trials, promo codes, customer email prefill, and `stripe_price_id` references. Falls back to informative stub with payload preview when no key found
+- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions locally via Stripe REST API. The publishable key enables inline card fields; the secret key enables hosted/embedded checkout sessions and PaymentIntent creation. Supports subscriptions, trials, promo codes, customer email prefill, and `stripe_price_id` references. Falls back to informative stub when no keys found
 - **Local dev events** — page views, field changes, and checkout events stream to your terminal and broadcast via SSE at `/__dev_events_stream`. AI agents can subscribe. Recent events available as JSON at `GET /__dev_events?limit=50`. Zero production pollution
 
 **Dev Preview Feature Parity:**
@@ -3320,6 +3325,44 @@ Catalog Kit has a **built-in cart and checkout system**. You do NOT need to buil
 3. **Cart drawer** — clicking the cart button opens a right-side slide-out panel showing all accepted offers with images, titles, prices, and a remove button. A "Proceed to Checkout" button takes the visitor to the checkout page.
 4. **Checkout page** — displays an order summary of all cart items and redirects to Stripe Checkout to complete payment.
 
+### Display cart vs payment items
+
+The cart system has **two independent layers**:
+
+| Layer | What it controls | API methods |
+|-------|-----------------|-------------|
+| **Display cart** | What the visitor *sees* — the cart drawer, floating badge count, order summary UI | `addDisplayItem()`, `removeDisplayItem()`, `getDisplayItems()` |
+| **Payment items** | What Stripe actually *charges* — the line items sent to Stripe Checkout | `setPaymentItems()`, `getPaymentItems()` |
+
+**By default, these are the same.** If you don't call `setPaymentItems()`, the display items are sent to Stripe as-is. This is the normal flow for page-offer-based carts.
+
+**When you decouple them**, you can show one thing in the cart UI and charge something different via Stripe. Use cases:
+
+- **Bundled pricing** — display "Premium Bundle — $99" in the cart, but send itemized line items to Stripe for accounting (Team License $75 + Onboarding $24)
+- **Dynamic discounts** — show original prices in the cart UI but send discounted amounts to Stripe
+- **AI agent cart building** — an AI agent programmatically builds a custom cart without needing page offers in the schema
+- **Upsell injection** — add a bonus item to payment items that isn't shown in the visual cart (e.g. a processing fee)
+
+```javascript
+const kit = window.CatalogKit.get();
+
+// Show a bundle in the cart UI
+kit.addDisplayItem({
+  offer_id: "bundle-99", page_id: "custom",
+  title: "Premium Bundle", price_display: "$99", amount_cents: 9900,
+});
+
+// But charge itemized line items via Stripe
+kit.setPaymentItems([
+  { offer_id: "license", page_id: "custom", title: "Team License (5 seats)", amount_cents: 7500 },
+  { offer_id: "onboarding", page_id: "custom", title: "Onboarding Fee", amount_cents: 2400 },
+]);
+
+kit.startCheckout(); // Cart UI shows "Premium Bundle $99", Stripe charges two line items
+```
+
+To clear the override and go back to using display items for Stripe: `kit.setPaymentItems(null)`.
+
 ### Checkout settings
 
 Configure checkout in `settings.checkout`:
@@ -3345,6 +3388,9 @@ Configure checkout in `settings.checkout`:
         "customer_name": "comp_name",
         "customer_phone": "comp_phone"
       },
+
+      // Skip
+      "allow_skip": true,                      // Allow "Continue without paying" button (default: true, set false to require payment)
 
       // Appearance
       "button_text": "Subscribe Now",
@@ -3497,10 +3543,26 @@ kit.on('before_checkout', (e) => {
   window.location.href = 'https://my-custom-checkout.com?items=' + e.items.length;
 });
 
-// Programmatic cart control
-kit.openCart();    // Open the cart drawer
-kit.closeCart();   // Close the cart drawer
-kit.getCartItems(); // Get frozen array of current cart items
+// ── Display cart (visual UI) ──
+kit.openCart();                          // Open the cart drawer
+kit.closeCart();                         // Close the cart drawer
+kit.getDisplayItems();                   // Frozen array of items in the cart UI
+kit.addDisplayItem({                     // Add arbitrary item (no page-offer needed)
+  offer_id: "bundle-123",
+  page_id: "custom",
+  title: "Premium Bundle",
+  price_display: "$99",
+  amount_cents: 9900,
+});
+kit.removeDisplayItem("bundle-123");     // Remove by offer_id
+
+// ── Payment items (what Stripe charges) ──
+kit.setPaymentItems([                    // Override Stripe line items (null = use display items)
+  { offer_id: "license", page_id: "custom", title: "Team License", amount_cents: 7500 },
+  { offer_id: "onboard", page_id: "custom", title: "Onboarding", amount_cents: 2400 },
+]);
+kit.getPaymentItems();                   // Current override or null
+kit.startCheckout();                     // Show checkout page (fires before_checkout first)
 ```
 
 ---
