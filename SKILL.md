@@ -31,7 +31,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Agent API** — AI agents can fill out catalog forms headlessly via the stateful session API, with server-side validation and progressive disclosure
 - **TypeScript-as-config** — author catalogs as .ts files with full type safety, then push via CLI
 - **Local preview** — `catalogs catalog dev my-catalog.ts` previews locally with hot reload, visibility conditions, debug panel, and validation overlay
-- **Dev toolbar** — persistent toolbar at top showing catalog slug, schema version badge (`v1.0`), pages graph, element inspector toggle, debug mode toggle, Stripe status, events viewer, and production link. Minimizable to a floating pill (click to re-expand); state persists across reloads via sessionStorage
+- **Dev toolbar** — persistent toolbar at top showing catalog slug, schema version badge (`v1.0`), pages graph, element inspector toggle, debug mode toggle, Clear Cache button, Stripe status, events viewer, and production link. Minimizable to a floating pill (click to re-expand); state persists across reloads via sessionStorage
 - **Local file references** — use `./images/hero.png` in schemas, auto-uploaded to CDN on push
 - **Validate locally** — `catalogs catalog validate my-catalog.ts` checks routing, component IDs, orphan pages, reserved page IDs, and more — no token needed
 - **Scaffold catalogs** — `catalogs catalog init` creates a new catalog from a template (quiz-funnel, lead-capture, product-catalog, blank)
@@ -2359,6 +2359,7 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | `kit.goNext()` | Advance to next page (runs validation + hooks) |
 | `kit.goBack()` | Go to previous page |
 | `kit.goToPage(pageId)` | Navigate directly to any page by ID (adds current page to history, no validation) |
+| `kit.__devForceGoToPage(pageId)` | Dev-only: navigate to a page, bypassing `auto_skip` for one cycle. Used by the dev toolbar's Pages graph. Not available in production |
 | **Component props** | |
 | `kit.setComponentProp(id, prop, value)` | Override any component prop at runtime (e.g. `hidden`, `label`, `options`). Works on ALL component types — display and input alike |
 | **Display cart** (visual UI: drawer, badges, order summary) | |
@@ -2682,17 +2683,19 @@ When checkboxes have nested inputs (e.g. proof URLs, wallet addresses), you **mu
 | Checkout crashes or behaves differently in prod vs dev | Using DOM manipulation (`document.querySelector`) to click the cart checkout button after `preventDefault()` + `setTimeout` | Use a terminal page (no outgoing routing edges) so checkout triggers automatically, or call `kit.startCheckout()`. See [Triggering Checkout](#triggering-checkout) |
 | `Unexpected token '<', "<!DOCTYPE"... is not valid JSON` on checkout | Outdated CLI — the dev server fetch interceptor is missing the `/checkout/intent` route | Run `npm install -g @officexapp/catalogs-cli@latest` to update. Ensure both `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are in your `.env` file in the catalog directory |
 | Stripe checkout shows "not configured" error | Missing Stripe keys in `.env` | Create a `.env` file in your catalog project directory with `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...`. The dev server checks the catalog directory, not your home directory |
+| Page redirects to start on reload during local dev | Session persistence restoring a stale session from localStorage | Click "Clear Cache" in the dev toolbar, or append `?dev_force_page=page_id` to the URL to jump directly to any page and bypass the resume modal |
 
-### Debug mode
+### Debug mode & dev URL params
 
-Append `?debug_mode=verbose` or `?debug_mode=slim` to any catalog URL for console logging.
+Append these query parameters to any catalog URL:
 
-| Mode | What it logs |
-|---|---|
-| `slim` | CatalogKit registration, script execution, pageenter events, quiz score updates |
-| `verbose` | All of slim + full formState at page transitions, quiz answer details, listener counts, fieldchange events |
+| Param | Purpose | Example |
+|---|---|---|
+| `?debug_mode=verbose` | Full console logging (formState, quiz answers, listener counts, fieldchange) | `http://localhost:3456/?debug_mode=verbose` |
+| `?debug_mode=slim` | Minimal console logging (registration, scripts, pageenter, quiz scores) | `http://localhost:3456/?debug_mode=slim` |
+| `?dev_force_page=page_id` | Jump directly to a page on load, bypassing entry page and session resume modal | `http://localhost:3456/?dev_force_page=next_steps` |
 
-Example: `https://yoursubdomain.catalogkit.cc/your-catalog?debug_mode=verbose`
+Params can be combined: `http://localhost:3456/?dev_force_page=checkout_page&debug_mode=verbose`
 
 ---
 
@@ -2792,7 +2795,7 @@ The CLI requires an **explicit** auth token — it will never silently pick up t
 1. **`--token` CLI flag** — `catalogs --token cfk_... catalog push schema.json`
 2. **`CATALOG_KIT_TOKEN` environment variable** — `export CATALOG_KIT_TOKEN="cfk_..."`
 
-No config files (`~/.catalog-kit/config.json`) or `.env` files are read. This is intentional — implicit token resolution caused a bug where multiple CLI sessions could silently use different accounts.
+No config files (`~/.catalog-kit/config.json`) are read for auth. This is intentional — implicit token resolution caused a bug where multiple CLI sessions could silently use different accounts. However, both `catalog dev` and `catalog push` **do** auto-load `.env`, `.env.local`, and `.env.development` files from the catalog directory for non-auth variables (e.g. `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`). Already-set environment variables are never overridden.
 
 > **Safety feature:** Before any mutating operation (`catalog push`, `video upload`), the CLI prints your authenticated identity (subdomain + email) so you can confirm you're operating on the correct account.
 
@@ -2860,7 +2863,7 @@ No token required — `dev` mode is purely local. Edit your catalog file and sav
 - **Prefill & default values** — `default_value` on components initializes formState on mount. URL param prefill via `settings.url_params.prefill_mappings`. `prefill_mode: "hidden"` hides prefilled fields; `prefill_mode: "readonly"` renders them as display-only text
 - **Auto-skip pages** — pages with `auto_skip: true` are skipped (via `replaceState`) when all visible required inputs already have values
 - **Browser history** — pushState/popstate integration: browser back button returns to previous page, auto-skip uses replaceState to stay invisible in history
-- **Session persistence** — formState, currentPageId, and history are saved to localStorage (keyed by catalog slug). On return, a "Resume" / "Start Over" prompt appears if the user left mid-funnel. Cleared on submission
+- **Session persistence** — formState, currentPageId, and history are saved to localStorage (keyed by catalog slug). On return, a "Resume" / "Start Over" prompt appears if the user left mid-funnel. Cleared on submission. Use the "Clear Cache" button in the dev toolbar to reset, or append `?dev_force_page=page_id` to bypass the resume modal entirely
 - **Cart & offers** — full cart UI (floating button + slide-out drawer) that collects page offers via `accept_field`/`accept_value`. Cart persists across pages, items can be removed
 - **Cart settings** — `settings.cart`: `position` (4 corners), `hide_button`, `title`, `checkout_button_text`, `destination_url` (external redirect), `destination_page` (internal page navigation)
 - **Sticky bottom bar** — `settings.sticky_bar` or `page.sticky_bar`: delay, scroll direction show/hide, template interpolation (`{{fieldId}}`), style variants (solid, glass, glass_dark, gradient), primary action dispatch, secondary actions, `field:<id>:<value>` dispatch
@@ -2869,17 +2872,58 @@ No token required — `dev` mode is purely local. Edit your catalog file and sav
 - **Video watch tracking** — native `<video>` elements report `watch_percent` via `timeupdate`. Pages with `require_watch_percent` block navigation until the threshold is met
 - **Hidden components respected** — components with `hidden: true` (at component level or `props.hidden`) are properly excluded from rendering, matching production behavior
 - **Visibility conditions** — components with `visibility` condition groups are live-evaluated against formState and URL params (all 13 operators supported)
-- **Dev toolbar** — fixed bar at top showing: catalog slug + schema version badge (`v1.0`), Pages button, Inspect button, Debug toggle, Stripe status indicator (green = enabled, yellow = stubbed), Events viewer, Prod link (opens production URL in new tab when published), and minimize button. Click minimize (`—`) to collapse to a floating pill in the top-right; click the pill to re-expand. Minimized state persists across reloads via sessionStorage
-- **Pages graph** — click "Pages" in the toolbar to open a full-screen modal showing a visual graph of all pages and routing edges. Powered by Cytoscape.js with breadthfirst layout from the entry point. Entry page has a green border, current page glows with theme color. Edge labels show "conditional" or "default". Click any page node to navigate directly to it. Supports pan and zoom for large catalogs
+- **Dev toolbar** — fixed bar at top showing: catalog slug + schema version badge (`v1.0`), Pages button, Inspect button, Debug toggle, Clear Cache button, Stripe status indicator (green = enabled, yellow = stubbed), Events viewer, Prod link (opens production URL in new tab when published), and minimize button. Click minimize (`—`) to collapse to a floating pill in the top-right; click the pill to re-expand. Minimized state persists across reloads via sessionStorage
+- **Pages graph** — click "Pages" in the toolbar to open a full-screen modal showing a visual graph of all pages and routing edges. Powered by Cytoscape.js with breadthfirst layout from the entry point. Entry page has a green border, current page glows with theme color. Edge labels show "conditional" or "default". Click any page node to force-navigate directly to it — this bypasses `auto_skip` so you can inspect any page regardless of form state. Supports pan and zoom for large catalogs
 - **Element inspector** — click the "Inspect" button in the toolbar (or hold Shift+Alt) to activate. Cursor changes to crosshair. Hover any component (including cart, sticky bar, checkout page, popups) to see a tooltip with its reference path, type, and label. Click to copy structured JSON with `pageId/componentId` reference for AI agents. Inspector automatically deactivates after copying, or click the Inspect button again to turn it off
 - **Events viewer** — click "Events" in the toolbar to open a full-screen modal with a searchable, filterable table of all dev events (page views, field changes, checkout events). Filter by event type, search event data, and see timestamps. Events also stream to terminal and SSE endpoint
 - **Debug mode** — click "Debug" in the toolbar to cycle through modes: none → slim → verbose. Mode is reflected in URL params (`?debug_mode=slim` or `?debug_mode=verbose`) and persists across page reloads via `history.replaceState()`
+- **Force page via URL** — append `?dev_force_page=page_id` to jump directly to any page on load, bypassing the entry page and suppressing the session resume modal. Useful for testing deep pages without clicking through the funnel. Example: `http://localhost:3456/?dev_force_page=next_steps`. The page must exist in the catalog schema; invalid page IDs are ignored (falls back to entry page)
 - **Catalog version** — schema version displayed as a badge (e.g. `v1.0`) next to the catalog slug in the toolbar, pulled from `schema.schema_version`
 - **Production link** — "Prod" link in toolbar opens the published catalog URL in a new tab. URL is auto-resolved from: (1) catalog's `url` field, (2) subdomain-based URL (`https://{subdomain}.catalogkit.cc/{slug}`), (3) fallback `https://catalogkit.cc/c/{catalog_id}`. Shows as gray/disabled when catalog isn't published yet
 - **Validation overlay** — validation errors and warnings appear in a fixed overlay at bottom-left, reappears on hot reload, dismissible via close button
 - **Routing** — conditional page routing works locally using the shared engine (supports all operators, condition groups, edge priority, default edges)
 - **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions locally via Stripe REST API. The publishable key enables inline card fields; the secret key enables hosted/embedded checkout sessions and PaymentIntent creation. Supports subscriptions, trials, promo codes, customer email prefill, and `stripe_price_id` references. Falls back to informative stub when no keys found
 - **Local dev events** — page views, field changes, and checkout events stream to your terminal and broadcast via SSE at `/__dev_events_stream`. AI agents can subscribe. Recent events available as JSON at `GET /__dev_events?limit=50`. Zero production pollution
+- **SSE reconnect backoff** — EventSource connections (`/__dev_sse` for auto-reload, `/__dev_events_stream` for events) use exponential backoff (1s → 2s → 4s → ... → 30s max) on connection failure, preventing browser reconnect storms during server restarts
+
+### Dev Server HTTP Endpoints
+
+The local dev server exposes these endpoints at `http://localhost:3456` (or custom `--port`). Developers can use these directly — no client-side overrides needed:
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/checkout/session` | POST | Create a Stripe Checkout session (requires `STRIPE_SECRET_KEY` in `.env`). Same as production API |
+| `/checkout/intent` | POST | Create a PaymentIntent or SetupIntent for inline card fields (requires `STRIPE_SECRET_KEY` in `.env`) |
+| `/__dev_sse` | GET | SSE stream for auto-reload — sends `data: reload\n\n` when catalog file changes |
+| `/__dev_events_stream` | GET | SSE stream for dev events — broadcasts page views, field changes, checkout events as JSON |
+| `/__dev_events` | GET | Recent dev events as JSON array. Query param: `?limit=50` (default 50) |
+| `/__dev_event` | POST | Submit a custom dev event (JSON body: `{ type, data, ts }`) |
+| `/__dev_meta` | GET | Dev server metadata: slug, schema version, pages count, Stripe status, prod URL |
+| `/assets/*` | GET | Serves local files from the catalog directory (images, videos, scripts) |
+
+**Checkout endpoints** accept the same request body as the production API:
+
+```json
+{
+  "user_id": "dev-user",
+  "catalog_slug": "my-catalog",
+  "tracer_id": "tr_...",
+  "line_items": [
+    { "offer_id": "product-1", "title": "Product", "amount_cents": 2999, "payment_type": "one_time", "currency": "usd", "quantity": 1 }
+  ],
+  "form_state": { "email": "user@example.com" }
+}
+```
+
+**SSE streams** — connect with `EventSource` or `curl`:
+
+```bash
+# Watch for file changes (auto-reload)
+curl -N http://localhost:3456/__dev_sse
+
+# Watch dev events (page views, field changes, checkout)
+curl -N http://localhost:3456/__dev_events_stream
+```
 
 **Dev Preview Feature Parity:**
 - **Supported component types (inputs):** short_text, long_text, email, phone, url, number, password, dropdown, multiple_choice, checkboxes, picture_choice, slider, star_rating, switch/checkbox, opinion_scale, date, datetime, time, date_range, address, currency, file_upload (stubbed), signature (stubbed)
@@ -2966,7 +3010,7 @@ my-project/
 
 | Feature | Dev mode | Production |
 |---|---|---|
-| Stripe checkout | Live (test key) if `STRIPE_SECRET_KEY` in `.env`, otherwise stubbed with payload preview | Live |
+| Stripe checkout | Live (test key) via `/checkout/session` and `/checkout/intent` if `STRIPE_SECRET_KEY` in `.env`, otherwise stubbed | Live |
 | Events | Local only — terminal + SSE stream (`/__dev_events_stream`) | Production analytics |
 | File serving | Local filesystem | CDN (CloudFront) |
 | Hot reload | On file save (SSE) | N/A |
