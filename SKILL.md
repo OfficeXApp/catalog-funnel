@@ -32,7 +32,7 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **TypeScript-as-config** — author catalogs as .ts files with full type safety, then push via CLI
 - **Local preview** — `catalogs catalog dev my-catalog.ts` previews locally with hot reload, visibility conditions, debug panel (`Ctrl+D`), and validation overlay
 - **Local file references** — use `./images/hero.png` in schemas, auto-uploaded to CDN on push
-- **Validate locally** — `catalogs catalog validate my-catalog.ts` checks routing, component IDs, orphan pages, and more — no token needed
+- **Validate locally** — `catalogs catalog validate my-catalog.ts` checks routing, component IDs, orphan pages, reserved page IDs, and more — no token needed
 - **Scaffold catalogs** — `catalogs catalog init` creates a new catalog from a template (quiz-funnel, lead-capture, product-catalog, blank)
 - **Diff against remote** — `catalogs catalog diff my-catalog.ts` shows structural changes vs the deployed version
 - **Open in browser** — `catalogs catalog open my-slug` opens the published catalog URL in your default browser
@@ -2850,7 +2850,7 @@ No token required — `dev` mode is purely local. Edit your catalog file and sav
 - **Browser history** — pushState/popstate integration: browser back button returns to previous page, auto-skip uses replaceState to stay invisible in history
 - **Session persistence** — formState, currentPageId, and history are saved to localStorage (keyed by catalog slug). On return, a "Resume" / "Start Over" prompt appears if the user left mid-funnel. Cleared on submission
 - **Cart & offers** — full cart UI (floating button + slide-out drawer) that collects page offers via `accept_field`/`accept_value`. Cart persists across pages, items can be removed
-- **Cart settings** — `settings.cart`: `position` (4 corners), `hide_button`, `title`, `checkout_button_text`, `checkout_url` (external redirect)
+- **Cart settings** — `settings.cart`: `position` (4 corners), `hide_button`, `title`, `checkout_button_text`, `destination_url` (external redirect), `destination_page` (internal page navigation)
 - **Sticky bottom bar** — `settings.sticky_bar` or `page.sticky_bar`: delay, scroll direction show/hide, template interpolation (`{{fieldId}}`), style variants (solid, glass, glass_dark, gradient), primary action dispatch, secondary actions, `field:<id>:<value>` dispatch
 - **`__variants` resolution** — `*__variants` keys on component props and actions are resolved against hints (from `catalog.hints.defaults` + URL `?variant=slug`). Highest-scoring condition match wins
 - **CatalogKit scripting API** — `window.CatalogKit` exposes `getField`, `setField`, `getPageId`, `goNext`, `goBack`, `goToPage`, `on`/`off` event listeners (`pageenter`, `pageexit`, `fieldchange`, etc.), and `setValidationError`. Inline `<script>` tags in `html` components are executed via `new Function()` (fingerprinted to avoid re-execution on re-renders)
@@ -3392,7 +3392,8 @@ Customize the floating cart button, slide-out drawer, and checkout flow. All HTM
       "icon": "bag",                           // "cart" (default) | "bag" | "basket" | image URL
       "title": "Your Selection",               // Drawer title (default: "Your Cart")
       "checkout_button_text": "Complete Order", // Override "Proceed to Checkout" text
-      "checkout_url": "https://pay.example.com?email={{email}}", // External URL (skips built-in checkout)
+      "destination_url": "https://pay.example.com?email={{email}}", // External URL (skips built-in checkout)
+      "destination_page": "checkout",          // Internal page ID (navigates within funnel instead of Stripe overlay)
       "position": "bottom-left",               // "bottom-right" (default) | "bottom-left" | "top-right" | "top-left"
       "hide_button": false,                    // Hide floating button (use kit.openCart() to open programmatically)
 
