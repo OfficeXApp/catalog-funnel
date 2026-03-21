@@ -559,8 +559,8 @@ POST https://api.catalogkit.cc/agent/v1/sessions
           "label": "Industry",
           "required": true,
           "options": [
-            { "value": "saas", "label": "SaaS" },
-            { "value": "healthcare", "label": "Healthcare" }
+            { "value": "saas", "heading": "SaaS" },
+            { "value": "healthcare", "heading": "Healthcare" }
           ]
         }
       ],
@@ -603,8 +603,8 @@ POST https://api.catalogkit.cc/agent/v1/sessions/{session_id}/advance
           "label": "Plan",
           "required": true,
           "options": [
-            { "value": "pro", "label": "Pro - $99/mo" },
-            { "value": "enterprise", "label": "Enterprise - Custom" }
+            { "value": "pro", "heading": "Pro - $99/mo" },
+            { "value": "enterprise", "heading": "Enterprise - Custom" }
           ]
         }
       ]
@@ -1105,6 +1105,40 @@ Choice components (`multiple_choice`, `checkboxes`, `dropdown`) support an optio
 
 Value is stored as `__other__:<text>`. **Do not set `other_option: true` unless you intentionally want a free-text fallback** — otherwise an unexpected textarea will render.
 
+### Option Heading & Subheading
+
+Every choice option uses `heading` as the primary display text and an optional `subheading` for secondary context:
+
+```json
+{
+  "options": [
+    { "value": "solopreneur", "heading": "Solopreneur / Creator", "subheading": "I run my own business or personal brand" },
+    { "value": "agency", "heading": "Agency / Freelancer", "subheading": "I build funnels and sites for clients" },
+    { "value": "saas", "heading": "SaaS / Software" }
+  ]
+}
+```
+
+### Option Ribbons
+
+Options in `multiple_choice` and `picture_choice` can display a ribbon badge (e.g. "Recommended", "Best Value") with customizable colors:
+
+```json
+{
+  "options": [
+    { "value": "starter", "heading": "Starter", "subheading": "For individuals" },
+    { "value": "pro", "heading": "Pro", "subheading": "For growing teams", "ribbon": "Recommended" },
+    { "value": "enterprise", "heading": "Enterprise", "subheading": "Custom solutions", "ribbon": "Best Value", "ribbon_bg": "#10b981", "ribbon_color": "#fff" }
+  ]
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `ribbon` | string | — | Badge text displayed on the option |
+| `ribbon_bg` | string | theme color | Ribbon background color |
+| `ribbon_color` | string | `#fff` | Ribbon text color |
+
 ### Disabled Options
 
 Individual options in `multiple_choice`, `checkboxes`, `dropdown`, and `picture_choice` can be marked as `disabled: true`. Disabled options are visible but not selectable — rendered at 50% opacity with `cursor-not-allowed`. Useful for hinting at future features or "coming soon" tiers.
@@ -1112,16 +1146,16 @@ Individual options in `multiple_choice`, `checkboxes`, `dropdown`, and `picture_
 ```json
 {
   "options": [
-    { "value": "starter", "label": "Starter — Free" },
-    { "value": "pro", "label": "Pro — $29/mo" },
-    { "value": "enterprise", "label": "Enterprise — Coming Soon", "disabled": true }
+    { "value": "starter", "heading": "Starter — Free" },
+    { "value": "pro", "heading": "Pro — $29/mo" },
+    { "value": "enterprise", "heading": "Enterprise — Coming Soon", "disabled": true }
   ]
 }
 ```
 
 ### Picture Choice Component
 
-Visual option picker with image cards. Each option has an image, label, and value. Supports single or multi-select.
+Visual option picker with image cards. Each option has an image, heading, and value. Supports single or multi-select. Options can include an optional `subheading` for additional context.
 
 ```json
 {
@@ -1132,9 +1166,9 @@ Visual option picker with image cards. Each option has an image, label, and valu
     "required": true,
     "image_fit": "contain",
     "options": [
-      { "label": "X (Twitter)", "value": "twitter", "image": "https://example.com/x-logo.png" },
-      { "label": "LinkedIn", "value": "linkedin", "image": "https://example.com/linkedin-logo.png" },
-      { "label": "Reddit", "value": "reddit", "image": "https://example.com/reddit-logo.png" }
+      { "heading": "X (Twitter)", "value": "twitter", "image": "https://example.com/x-logo.png" },
+      { "heading": "LinkedIn", "subheading": "Best for B2B", "value": "linkedin", "image": "https://example.com/linkedin-logo.png" },
+      { "heading": "Reddit", "value": "reddit", "image": "https://example.com/reddit-logo.png" }
     ]
   }
 }
@@ -1142,7 +1176,7 @@ Visual option picker with image cards. Each option has an image, label, and valu
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `options` | `array` | `[]` | Array of `{ label, value, image }` objects. `image` is a URL |
+| `options` | `array` | `[]` | Array of `{ heading, value, image }` objects. `image` is a URL. Optional `subheading` for secondary text |
 | `multiple` | `boolean` | `false` | Allow selecting more than one option |
 | `image_fit` | `"contain"` / `"cover"` | `"contain"` | How images fit within the card. `contain` shows the full image with padding (safe default for mixed aspect ratios — logos, icons, photos). `cover` crops to fill the card (use only when all images share similar aspect ratios) |
 
@@ -1668,9 +1702,9 @@ Show correct/incorrect feedback when the visitor clicks Continue by adding `reve
   "type": "multiple_choice",
   "label": "What's the catch?",
   "options": [
-    { "value": "a", "label": "No Babysitting Policy" },
-    { "value": "b", "label": "Must show up consistently" },
-    { "value": "c", "label": "All of the Above" }
+    { "value": "a", "heading": "No Babysitting Policy" },
+    { "value": "b", "heading": "Must show up consistently" },
+    { "value": "c", "heading": "All of the Above" }
   ],
   "quiz": {
     "correct_answer": "c",
@@ -2117,7 +2151,7 @@ Checkboxes are a first-class section card component. Each option acts as a card 
 
 **Conditional rendering:** Set `expand_on_select: true` on an option to hide its nested inputs until the checkbox is manually checked (old behavior). Auto-check is disabled for these options.
 
-Options support: `value`, `label`, `description`, `image` (thumbnail), `button` (side link), `expand_on_select` (boolean), and `inputs` (array of nested sub-components).
+Options support: `value`, `heading`, `subheading`, `image` (thumbnail), `button` (side link), `expand_on_select` (boolean), and `inputs` (array of nested sub-components).
 
 Values are stored with compound IDs: `checkboxComponentId.optionValue.inputId`. Nested input `default_value` (in `input.props.default_value` or `input.default_value`) is initialized at startup, so nested values are available via `getAllFields()` and template interpolation (`{{checkboxId.optionValue.inputId}}`) from the first render.
 
@@ -2154,17 +2188,17 @@ Values are stored with compound IDs: `checkboxComponentId.optionValue.inputId`. 
       },
       {
         "value": "preferences",
-        "label": "Set Your Preferences",
+        "heading": "Set Your Preferences",
         "expand_on_select": true,
         "inputs": [
           { "id": "group_size", "type": "dropdown", "label": "Preferred group size", "props": { "options": ["Small (3-5)", "Medium (6-10)", "Large (10+)"] } },
           { "id": "sub_tasks", "type": "checkboxes", "label": "Sub-tasks", "props": { "options": [
-            { "value": "read_docs", "label": "Read the documentation" },
-            { "value": "watch_video", "label": "Watch intro video", "button": { "label": "Watch", "url": "https://example.com/video", "style": "primary", "size": "sm" } }
+            { "value": "read_docs", "heading": "Read the documentation" },
+            { "value": "watch_video", "heading": "Watch intro video", "button": { "label": "Watch", "url": "https://example.com/video", "style": "primary", "size": "sm" } }
           ] } }
         ]
       },
-      { "value": "self_paced", "label": "Self-Paced Learning" }
+      { "value": "self_paced", "heading": "Self-Paced Learning" }
     ]
   }
 }
@@ -2197,9 +2231,12 @@ Each item in the `inputs` array has these fields:
 | Property | Type | Description |
 |---|---|---|
 | `value` | string | *(required)* Unique identifier for the option |
-| `label` | string | *(required)* Display text |
-| `description` | string | Small subtext below the label |
+| `heading` | string | *(required)* Primary display text |
+| `subheading` | string | Secondary text below the heading |
 | `image` | string | Thumbnail image URL (rounded, 32x32) |
+| `ribbon` | string | Badge text shown on the option (e.g. "Recommended", "Best Value"). Works on `multiple_choice` and `picture_choice` |
+| `ribbon_bg` | string | Ribbon background color (defaults to theme color) |
+| `ribbon_color` | string | Ribbon text color (defaults to white) |
 | `button` | EmbeddedButton | Side link button (see [Embedded Buttons](#embedded-buttons)) |
 | `inputs` | array | Nested sub-components — always visible by default, auto-checks when required inputs filled |
 | `expand_on_select` | boolean | When `true`, nested inputs only show after checkbox is checked (no auto-check). Default: `false` |
@@ -2371,6 +2408,7 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | **Payment items** (what actually gets sent to Stripe) | |
 | `kit.setPaymentItems(items)` | Override line items sent to Stripe at checkout. Pass `null` to clear and fall back to display items. Lets you show a bundled deal in the UI while sending itemized charges to Stripe |
 | `kit.getPaymentItems()` | Get the current Stripe override array, or `null` if using display items |
+| `kit.clearCart()` | Clear all display items and payment items, fires `cart_clear` event. Useful between checkout steps in upsell chains |
 | `kit.startCheckout()` | Programmatically trigger the built-in checkout page (fires `before_checkout`, then shows checkout). Use this instead of DOM-clicking the cart checkout button |
 | **Client reference ID** (passed to Stripe as `client_reference_id`) | |
 | `kit.setClientReferenceId(id)` | Set a custom `client_reference_id` for the Stripe checkout session. Pass `null` to clear. Best used inside a `before_checkout` listener so custom logic runs right before the session is created |
@@ -2479,7 +2517,7 @@ Fetch data from your backend when a page loads and populate dropdown options dyn
   "id": "plan_loader",
   "type": "html",
   "props": {
-    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:select_plan', async () => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://api.myapp.com/plans');\n    const plans = await res.json();\n    kit.setComponentProp('plan_dropdown', 'options',\n      plans.map(p => ({ value: p.id, label: p.name + ' — ' + p.price + '/mo' }))\n    );\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
+    "content": "<script>\nconst kit = window.CatalogKit.get();\n\nkit.on('pageenter:select_plan', async () => {\n  kit.setButtonLoading(true);\n  try {\n    const res = await fetch('https://api.myapp.com/plans');\n    const plans = await res.json();\n    kit.setComponentProp('plan_dropdown', 'options',\n      plans.map(p => ({ value: p.id, heading: p.name + ' — ' + p.price + '/mo' }))\n    );\n  } finally {\n    kit.setButtonLoading(false);\n  }\n});\n</script>"
   }
 }
 ```
@@ -2684,8 +2722,9 @@ When checkboxes have nested inputs (e.g. proof URLs, wallet addresses), you **mu
 | `setValidationError` doesn't display anything | Wrong `componentId` passed — must match the `id` of an input component on the current page | Check the component `id` in your schema matches the first argument |
 | Script doesn't execute | `html` component not on the current page, or `content` prop missing `<script>` tags | Ensure the `html` component is in the page's `components` array and the content is wrapped in `<script>...</script>` |
 | Checkout crashes or behaves differently in prod vs dev | Using DOM manipulation (`document.querySelector`) to click the cart checkout button after `preventDefault()` + `setTimeout` | Use a terminal page (no outgoing routing edges) so checkout triggers automatically, or call `kit.startCheckout()`. See [Triggering Checkout](#triggering-checkout) |
-| `Unexpected token '<', "<!DOCTYPE"... is not valid JSON` on checkout | Outdated CLI — the dev server fetch interceptor is missing the `/checkout/intent` route | Run `npm install -g @officexapp/catalogs-cli@latest` to update. Ensure both `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are in your `.env` file in the catalog directory |
+| `Unexpected token '<', "<!DOCTYPE"... is not valid JSON` on checkout | Outdated CLI — the dev server fetch interceptor is missing checkout routes | Run `npm install -g @officexapp/catalogs-cli@latest` to update. Ensure both `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are in your `.env` file in the catalog directory |
 | Stripe checkout shows "not configured" error | Missing Stripe keys in `.env` | Create a `.env` file in your catalog project directory with `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...`. The dev server checks the catalog directory, not your home directory |
+| "Stripe key mode mismatch" error on checkout | `stripe_publishable_key` in checkout settings is `pk_test_*` but the server's secret key is `sk_live_*` (or vice versa) | **For production:** set `stripe_publishable_key` to your live publishable key (`pk_live_*`). **For development:** use test keys in `.env` (`sk_test_*` + `pk_test_*`). Both keys must be from the same Stripe account and same mode (test or live). The CLI warns on `catalog push` if a test key is detected |
 | Page redirects to start on reload during local dev | Session persistence restoring a stale session from localStorage | Click "Clear Cache" in the dev toolbar, or append `?dev_force_page=page_id` to the URL to jump directly to any page and bypass the resume modal |
 
 ### Debug mode & dev URL params
@@ -2885,7 +2924,7 @@ No token required — `dev` mode is purely local. Edit your catalog file and sav
 - **Production link** — "Prod" link in toolbar opens the published catalog URL in a new tab. URL is auto-resolved from: (1) catalog's `url` field, (2) subdomain-based URL (`https://{subdomain}.catalogkit.cc/{slug}`), (3) fallback `https://catalogkit.cc/c/{catalog_id}`. Shows as gray/disabled when catalog isn't published yet
 - **Validation overlay** — validation errors and warnings appear in a fixed overlay at bottom-left, reappears on hot reload, dismissible via close button
 - **Routing** — conditional page routing works locally using the shared engine (supports all operators, condition groups, edge priority, default edges)
-- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions locally via Stripe REST API. The publishable key enables inline card fields; the secret key enables hosted/embedded checkout sessions and PaymentIntent creation. Supports subscriptions, trials, promo codes, customer email prefill, and `stripe_price_id` references. Falls back to informative stub when no keys found
+- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions locally via Stripe REST API. The publishable key enables the Payment Element (with Link and dynamic payment methods); the secret key enables hosted/embedded/custom checkout sessions. Supports subscriptions, trials, promo codes, customer email prefill, and `stripe_price_id` references. Falls back to informative stub when no keys found
 - **Local dev events** — page views, field changes, and checkout events stream to your terminal and broadcast via SSE at `/__dev_events_stream`. AI agents can subscribe. Recent events available as JSON at `GET /__dev_events?limit=50`. Zero production pollution
 - **SSE reconnect backoff** — EventSource connections (`/__dev_sse` for auto-reload, `/__dev_events_stream` for events) use exponential backoff (1s → 2s → 4s → ... → 30s max) on connection failure, preventing browser reconnect storms during server restarts
 
@@ -2896,7 +2935,8 @@ The local dev server exposes these endpoints at `http://localhost:3456` (or cust
 | Endpoint | Method | Description |
 |---|---|---|
 | `/checkout/session` | POST | Create a Stripe Checkout session (requires `STRIPE_SECRET_KEY` in `.env`). Same as production API |
-| `/checkout/intent` | POST | Create a PaymentIntent or SetupIntent for inline card fields (requires `STRIPE_SECRET_KEY` in `.env`) |
+| `/checkout/session/status` | GET | Get session status after redirect. Query: `?session_id=cs_...` |
+| `/checkout/intent` | POST | [DEPRECATED] Create a PaymentIntent or SetupIntent (requires `STRIPE_SECRET_KEY` in `.env`). Use `/checkout/session` with `ui_mode: "custom"` instead |
 | `/__dev_sse` | GET | SSE stream for auto-reload — sends `data: reload\n\n` when catalog file changes |
 | `/__dev_events_stream` | GET | SSE stream for dev events — broadcasts page views, field changes, checkout events as JSON |
 | `/__dev_events` | GET | Recent dev events as JSON array. Query param: `?limit=50` (default 50) |
@@ -3013,7 +3053,7 @@ my-project/
 
 | Feature | Dev mode | Production |
 |---|---|---|
-| Stripe checkout | Live (test key) via `/checkout/session` and `/checkout/intent` if `STRIPE_SECRET_KEY` in `.env`, otherwise stubbed | Live |
+| Stripe checkout | Live (test key) via `/checkout/session`, `/checkout/session/status`, and `/checkout/intent` (deprecated) if `STRIPE_SECRET_KEY` in `.env`, otherwise stubbed | Live |
 | Events | Local only — terminal + SSE stream (`/__dev_events_stream`) | Production analytics |
 | File serving | Local filesystem | CDN (CloudFront) |
 | Hot reload | On file save (SSE) | N/A |
@@ -3131,10 +3171,10 @@ Mark form fields as AI-prefillable to let the hint auto-answer them. Combined wi
   "props": {
     "label": "Company Size",
     "options": [
-      { "value": "1-10", "label": "1-10 employees" },
-      { "value": "11-50", "label": "11-50 employees" },
-      { "value": "51-200", "label": "51-200 employees" },
-      { "value": "201+", "label": "201+ employees" }
+      { "value": "1-10", "heading": "1-10 employees" },
+      { "value": "11-50", "heading": "11-50 employees" },
+      { "value": "51-200", "heading": "51-200 employees" },
+      { "value": "201+", "heading": "201+ employees" }
     ]
   }
 }
@@ -3368,6 +3408,56 @@ kit.startCheckout(); // Cart UI shows "Premium Bundle $99", Stripe charges two l
 
 To clear the override and go back to using display items for Stripe: `kit.setPaymentItems(null)`.
 
+### Checkout as a page type
+
+Checkout can be a routable page in the routing graph using `type: "checkout"`. This enables multi-checkout upsell chains where each checkout step has its own Stripe payment.
+
+```jsonc
+{
+  "pages": {
+    "landing": { "title": "Pick your plan", "components": [/* ... */] },
+    "checkout-main": {
+      "type": "checkout",
+      "title": "Complete Your Order",
+      "components": []
+    },
+    "upsell": { "title": "Add premium support?", "components": [/* ... */] },
+    "checkout-upsell": {
+      "type": "checkout",
+      "title": "Add-on Payment",
+      "checkout": { "title": "Premium Support" },  // overrides global checkout title
+      "components": []
+    },
+    "thank-you": { "title": "Thank you!", "components": [/* ... */] }
+  },
+  "routing": {
+    "entry": "landing",
+    "edges": {
+      "landing": { "next": "checkout-main" },
+      "checkout-main": { "next": "upsell" },
+      "upsell": { "next": "checkout-upsell" },
+      "checkout-upsell": { "next": "thank-you" }
+    }
+  }
+}
+```
+
+- **`type: "checkout"`** — renders the Stripe checkout UI instead of components. All existing pages without `type` are implicitly `"default"`.
+- **`page.checkout`** — optional `Partial<CheckoutSettings>` that overrides fields from `settings.checkout` for this specific checkout page. Useful for different titles, descriptions, or payment configs per checkout step.
+- **`components: []`** — required field but ignored for checkout pages. Always set to empty array.
+- **Routing** — checkout pages are normal routing nodes. Progress bar, back button, and BFS depth all work correctly.
+- **Skip button** — "Continue without paying" follows routing edges to the next page (does not end the funnel).
+- **Back button** — normal history pop via browser back.
+- **Cart clearing** — cart is automatically cleared after successful Stripe payment. Use `kit.clearCart()` for manual clearing between upsell steps.
+- **Stripe return** — after payment, Stripe redirects back with `ck_page` URL param to identify which checkout page initiated the payment, then auto-advances to the next page in routing.
+- **Reuse saved card** — set `reuse_payment_method: true` in `settings.checkout` to find-or-create a Stripe Customer by email. The 2nd checkout automatically shows the card saved from the 1st checkout. Requires `prefill_fields.customer_email`.
+
+**`kit.clearCart()`** — clears all cart display items and payment items. Useful between checkout steps in an upsell chain:
+
+```js
+window.CatalogKit.get().clearCart();
+```
+
 ### Checkout settings
 
 Configure checkout in `settings.checkout`:
@@ -3388,6 +3478,14 @@ Configure checkout in `settings.checkout`:
       "payment_description": "My Product",
       "client_reference_id": "{{comp_email}}", // Template strings supported. Can also be set dynamically via kit.setClientReferenceId() which takes priority
 
+      // Custom metadata — passed to Stripe session/intent metadata. Supports {{field_id}} templates.
+      // Editor keys merge with (and can override) system fields: catalog_id, catalog_slug, user_id, tracer_id.
+      "metadata": {
+        "ref": "spring-promo",
+        "customer_email": "{{comp_email}}",
+        "plan": "{{selected_plan}}"
+      },
+
       // Prefill from form fields
       "prefill_fields": {
         "customer_email": "comp_email",        // Component ID to read email from
@@ -3395,14 +3493,27 @@ Configure checkout in `settings.checkout`:
         "customer_phone": "comp_phone"
       },
 
+      // Saved payment methods (for multi-checkout upsell chains)
+      "reuse_payment_method": true,            // Find-or-create Stripe Customer by email, show saved cards on subsequent checkouts. Requires prefill_fields.customer_email
+
       // Skip
       "allow_skip": true,                      // Allow "Continue without paying" button (default: true, set false to require payment)
       "skip_button_text": "No thanks, continue free", // Custom text for skip button (default: "Continue without paying")
 
+      // Layout
+      "layout_desktop": "cart_left",           // "cart_left" (default) | "cart_right" — column order on desktop (lg+)
+      "layout_mobile": "cart_top",             // "cart_top" (default) | "cart_bottom" — column order on mobile (<lg)
+
       // Appearance
-      "ui_mode": "hosted",                     // "hosted" (redirect) | "embedded" (Stripe embedded checkout)
-                                               // When omitted + stripe_publishable_key is set: inline card fields (default)
+      "ui_mode": "custom",                     // "custom" (Payment Element, default) | "embedded" (Stripe embedded checkout) | "hosted" (redirect)
+                                               // When omitted + stripe_publishable_key is set: "custom" (Payment Element with Link support)
       "button_text": "Subscribe Now",
+      "card_header_text": "Complete Checkout",  // Text at top of payment column (default: "Complete Checkout")
+      "below_button": {                         // Optional content below the pay button (empty by default)
+        "type": "text",                         // "text" (default) | "button" — plain text or clickable link
+        "text": "90 day refunds",
+        "url": "https://..."                    // Only used when type is "button"
+      },
       "summary_lines": [                       // Display-only lines below cart items (no calculations — editor defines all text)
         { "label": "Subtotal", "value": "$97.00" },
         { "label": "Tax (8%)", "value": "$7.76" },
@@ -3446,8 +3557,8 @@ Define an `offer` on any page. When the visitor's form field matches the `accept
       "type": "multiple_choice",
       "label": "Select an option",
       "options": [
-        { "value": "accept", "label": "Yes, I want this!" },
-        { "value": "decline", "label": "No thanks" }
+        { "value": "accept", "heading": "Yes, I want this!" },
+        { "value": "decline", "heading": "No thanks" }
       ]
     }
   ],
@@ -3511,23 +3622,69 @@ Cart items support an optional `button` that renders as a side link next to the 
 
 ### Checkout page layout
 
-The checkout page uses a two-column layout on desktop (single column on mobile):
+The checkout page uses a two-column layout on desktop (single column on mobile). The column order is configurable independently for desktop and mobile.
 
-**Left column:**
+**Default layout:**
+- Desktop: cart (order summary) on left, card (payment) on right
+- Mobile: cart on top, card on bottom
+
+**Cart column (Order Summary):**
 - Order summary (cart items with images, prices, remove buttons)
 - Summary lines — tax, total, etc. (when `summary_lines` is set)
 - Coupon code input (when `allow_discount_codes` is enabled)
 - Testimonial (when `testimonial.enabled` is true)
 - Custom components (when `components` array is set)
 
-**Right column (sticky):**
-- Item count + trial badge
+**Card column (Payment — sticky):**
+- Header text (configurable via `card_header_text`, default: "Complete Checkout")
+- Trial badge (when `free_trial` is set)
 - Customer info fields (email, name, phone — from `prefill_fields`)
 - Card input fields (Stripe Elements — when `stripe_publishable_key` is set)
-- Pay button + skip button (when `allow_skip` is true)
+- Pay button
+- Below-button content (configurable via `below_button`, empty by default)
+- Skip button (when `allow_skip` is true)
 - Error messages
 - 3DS "Extra verification required" notice (when `require_3ds` is true)
 - "Powered by Stripe" badge
+
+#### Layout configuration
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `layout_desktop` | `"cart_left" \| "cart_right"` | `"cart_left"` | Column order on desktop (lg+). `"cart_right"` puts the order summary on the right and payment on the left. |
+| `layout_mobile` | `"cart_top" \| "cart_bottom"` | `"cart_top"` | Column order on mobile (<lg). `"cart_bottom"` puts the payment card on top and order summary below. |
+| `card_header_text` | `string` | `"Complete Checkout"` | Text displayed at the top of the payment card column. |
+| `below_button` | `object` | — | Optional content rendered below the checkout button. Empty by default. |
+| `below_button.type` | `"text" \| "button"` | `"text"` | Render as plain text or a clickable link. |
+| `below_button.text` | `string` | — | The text content to display. |
+| `below_button.url` | `string` | — | URL for button type (opens in new tab). |
+
+```jsonc
+// Example: swap columns — payment on left, cart on right (desktop)
+{ "checkout": { "layout_desktop": "cart_right" } }
+
+// Example: show payment card first on mobile
+{ "checkout": { "layout_mobile": "cart_bottom" } }
+
+// Example: customize card header and add refund notice
+{
+  "checkout": {
+    "card_header_text": "Secure Payment",
+    "below_button": { "type": "text", "text": "90 day money-back guarantee" }
+  }
+}
+
+// Example: refund policy link button below checkout
+{
+  "checkout": {
+    "below_button": {
+      "type": "button",
+      "text": "View refund policy",
+      "url": "https://example.com/refunds"
+    }
+  }
+}
+```
 
 ### Skip button
 
@@ -3586,11 +3743,13 @@ The checkout page supports three payment modes, determined automatically:
 
 | Config | Mode | Behavior |
 |---|---|---|
-| `stripe_publishable_key` set, no `ui_mode` | **Inline card fields** (default) | Stripe Elements CardElement renders in the right column. Payment confirmed client-side via `/checkout/intent` endpoint. Works with test cards. |
+| `stripe_publishable_key` set, no `ui_mode` or `"custom"` | **Payment Element** (default) | Stripe Payment Element renders in the right column with card, Link, and dynamic payment methods. Backed by Checkout Sessions `ui_mode: "custom"`. |
 | `stripe_publishable_key` set, `ui_mode: "embedded"` | **Embedded checkout** | Stripe's full embedded checkout UI renders in the right column. Stripe handles all card input and payment. |
 | No `stripe_publishable_key`, or `ui_mode: "hosted"` | **Hosted redirect** | Clicking the pay button redirects to Stripe's hosted checkout page. |
 
-**Inline card fields** is the recommended default for local development and production. It keeps the user on your page, supports 3DS challenges (Stripe handles the popup), and works with all Stripe test cards (`4242 4242 4242 4242`, `4000 0027 6000 3184` for 3DS, etc.).
+**Payment Element** is the recommended default for local development and production. It keeps the user on your page, automatically enables Link (one-click checkout), supports 3DS challenges, dynamic payment methods, and works with all Stripe test cards (`4242 4242 4242 4242`, `4000 0027 6000 3184` for 3DS, etc.).
+
+**Important:** `stripe_publishable_key` must match the mode (test/live) of the server's Stripe secret key. For production, use `pk_live_*`. For development, use `pk_test_*`. The CLI warns on `catalog push` if a test key is detected. Mismatched modes cause a "Stripe key mode mismatch" error at checkout.
 
 ### Supported checkout targets
 
@@ -3636,7 +3795,7 @@ Customize the floating cart button, slide-out drawer, and checkout flow. All HTM
 
 ### Cart events (analytics + JS)
 
-The following events are tracked automatically: `cart_add`, `cart_remove`, `checkout_start`, `checkout_skip`, `checkout_complete`.
+The following events are tracked automatically: `cart_add`, `cart_remove`, `checkout_start`, `payment_info_added`, `checkout_complete`, `checkout_skip`.
 
 **JavaScript events** via `window.CatalogKit`:
 
@@ -3720,7 +3879,7 @@ When the submit button is clicked on a **terminal page** (a page with no outgoin
 
 In this example, `review` has **no outgoing edges** — it is terminal. When the visitor clicks "Start Free Trial" on the review page, the platform fires the `submit` event and then shows the checkout page with the full order summary, payment button, and everything from `settings.checkout`.
 
-After payment, `settings.checkout.success_page_id` routes the visitor to your thank-you page (e.g. `"success_page_id": "end_screen"`).
+After payment, `settings.checkout.success_page_id` routes the visitor to your thank-you/next-steps page (e.g. `"success_page_id": "end_screen"`). **Always set this field when using checkout** — without it, visitors land back on page 1 after paying.
 
 ### 2. Cart checkout button
 
@@ -3821,13 +3980,96 @@ kit.on('before_checkout', (e) => {
 
 ---
 
+## Post-Checkout Redirect
+
+After Stripe redirects back to the catalog URL, the renderer automatically:
+
+1. Detects checkout success via URL params (`?checkout=success` or `?redirect_status=succeeded`)
+2. Navigates directly to `settings.checkout.success_page_id` (skipping the entry page)
+3. Fires a `checkout_complete` analytics event with Stripe metadata
+4. Strips Stripe query params from the URL (clean URL, no reload)
+5. Clears saved session (suppresses "resume where you left off?" modal)
+
+**If `success_page_id` is not set**, the visitor lands on page 1. Always configure it:
+
+```json
+{
+  "settings": {
+    "checkout": {
+      "success_page_id": "next_steps"
+    }
+  }
+}
+```
+
+### Stripe URL params by mode
+
+| Mode | Params Stripe adds to the return URL |
+|------|------|
+| Hosted | `session_id` |
+| Embedded | `session_id` |
+| Custom (Payment Element) | `payment_intent`, `payment_intent_client_secret`, `redirect_status` |
+
+All modes also include `checkout=success` (set by the framework). These params are automatically cleaned from the URL after detection — your success page sees a clean URL.
+
+### Tracking pixels & conversion events on checkout success
+
+The `checkout_complete` event fires automatically on the success page load. To run custom conversion tracking (e.g. Meta Pixel, Google Ads), add an `html` component with a `<script>` tag to your success page and listen for the CatalogKit `pageenter` event:
+
+```json
+{
+  "id": "conversion_pixel",
+  "type": "html",
+  "props": {
+    "content": "<script>\nconst kit = window.CatalogKit.get();\nkit.on('pageenter:next_steps', () => {\n  // Fire conversion pixel\n  if (window.fbq) fbq('track', 'Purchase', { value: 49.00, currency: 'USD' });\n  if (window.gtag) gtag('event', 'purchase', { value: 49.00, currency: 'USD' });\n});\n</script>"
+  }
+}
+```
+
+This works because after checkout, the renderer navigates directly to the success page and fires `pageenter` — your pixel fires exactly once.
+
+---
+
+## Checkout Event Lifecycle
+
+Events fired during the checkout flow (GA4-aligned naming for internal analytics):
+
+| Event | When it fires | Key payload |
+|-------|--------------|-------------|
+| `checkout_start` | User enters checkout (terminal page submit or cart checkout button) | `item_count` |
+| `payment_info_added` | Payment form becomes interactive (Payment Element "ready" or embedded checkout mounted) | `payment_mode` ("custom" / "embedded"), `item_count`, `value.amount_cents` |
+| `checkout_complete` | Stripe redirects back after successful payment (detected on page load via URL params) | `payment_intent`, `session_id`, `redirect_status`, `page_id` |
+| `checkout_skip` | User clicks "Continue without paying" | `item_count` |
+
+**Notes:**
+- `checkout_complete` increments the `checkout_completes` rollup counter used in dashboard analytics and revenue tracking
+- `payment_info_added` fires when the Stripe payment form is interactive, not when the user types card details (Stripe doesn't expose keystroke events)
+- For hosted mode checkout (redirect to stripe.com), `payment_info_added` does not fire since the payment form is on Stripe's domain
+- All events are internal framework analytics only — they do NOT push to GA4/GTM automatically. Use `kit.on('pageenter:success_page')` or webhook forwarding for external pixel/tag integrations
+
+---
+
 ## Checkout — 3D Secure & Trial Protection
 
-Catalog Kit supports advanced Stripe checkout features for protecting free trial funnels from payment failures and chargebacks. The system uses **two API endpoints** — one for hosted/embedded Stripe Checkout Sessions, and one for inline card-element payments via Stripe Elements.
+Catalog Kit supports advanced Stripe checkout features for protecting free trial funnels from payment failures and chargebacks. The system uses **Checkout Sessions** (`POST /checkout/session`) as the unified payment backend for all modes.
 
-### Checkout intent strategy (`/checkout/intent`)
+### Checkout session (`/checkout/session`)
 
-When using inline card fields (the default when `stripe_publishable_key` is set), the frontend calls `POST /checkout/intent` to create a Stripe PaymentIntent or SetupIntent. The strategy is **derived from your checkout config** — no explicit mode parameter needed:
+The primary endpoint — creates a Stripe Checkout Session. Supports three `ui_mode` values:
+
+- **`"custom"`** (default when `stripe_publishable_key` set) — Returns `{ session_id, client_secret }`. Frontend mounts Payment Element with the client secret, then calls `stripe.confirmPayment()`. Supports Link, dynamic payment methods, 3DS, trials, subscriptions — all handled by the Checkout Session.
+- **`"embedded"`** — Returns `{ session_id, client_secret }`. Frontend mounts Stripe's embedded checkout UI.
+- **`"hosted"`** (default when no publishable key) — Returns `{ session_id, session_url }`. Frontend redirects to Stripe's hosted page.
+
+### Session status verification (`GET /checkout/session/status`)
+
+After a successful Payment Element redirect, the frontend calls `GET /checkout/session/status?session_id=cs_...&user_id=...&catalog_slug=...` to verify the session completed. Returns `{ status, payment_status }`.
+
+### Checkout intent strategy (`/checkout/intent`) — DEPRECATED
+
+> **Deprecated:** Use `POST /checkout/session` with `ui_mode: "custom"` instead. This endpoint is kept functional for backwards compatibility with custom HTML+backend integrations that create raw PaymentIntents/SetupIntents.
+
+When using the legacy Card Element flow, the frontend calls `POST /checkout/intent` to create a Stripe PaymentIntent or SetupIntent. The strategy is derived from checkout config:
 
 | Checkout config | Intent type | What happens |
 |---|---|---|
@@ -3836,42 +4078,6 @@ When using inline card fields (the default when `stripe_publishable_key` is set)
 | `capture_method: "manual"` | PaymentIntent, auth-only hold | Hold funds on card, capture later via webhook |
 | `free_trial.enabled` (no hold) | **SetupIntent** | Verify card + 3DS, $0 charge, save for later |
 | `free_trial.enabled` + `capture_method: "manual"` | PaymentIntent, manual capture + off_session | **3DS + hold + save card** for post-trial billing |
-
-The endpoint reads `stripe_overrides.payment_intent_data` for `capture_method` and `setup_future_usage`, then composes the right intent. Simple catalogs with no overrides get a simple PaymentIntent. Complex flows layer on config — not modes.
-
-**Request:**
-```
-POST https://api.catalogkit.cc/checkout/intent
-Authorization: Bearer <api_key>
-```
-
-```json
-{
-  "user_id": "usr_...",
-  "catalog_slug": "my-catalog",
-  "tracer_id": "trc_...",
-  "line_items": [
-    { "offer_id": "pro-plan", "title": "Pro Plan", "amount_cents": 4900, "currency": "usd", "payment_type": "subscription", "interval": "month", "quantity": 1 }
-  ],
-  "form_state": { "comp_email": "user@example.com" }
-}
-```
-
-**Response:**
-```json
-{
-  "client_secret": "pi_xxx_secret_yyy",
-  "intent_type": "payment",
-  "customer_id": "cus_...",
-  "capture_method": "manual"
-}
-```
-
-The frontend uses `intent_type` to call either `stripe.confirmCardPayment()` or `stripe.confirmCardSetup()` with the Stripe CardElement.
-
-### Checkout session (`/checkout/session`)
-
-The original endpoint — creates a Stripe Checkout Session for hosted redirect or embedded checkout. Still used when `ui_mode: "hosted"` or `ui_mode: "embedded"` is explicitly set.
 
 ### 3D Secure Verification
 
@@ -3908,7 +4114,7 @@ Recommended combo: `require_3ds: true` + `trial_end_behavior: "cancel"` — veri
 
 ### Stripe Overrides (Advanced Pass-Through)
 
-Use `stripe_overrides` to control Stripe behavior. These apply to both the `/checkout/session` (Checkout Sessions) and `/checkout/intent` (PaymentIntent/SetupIntent) endpoints.
+Use `stripe_overrides` to control Stripe behavior. These apply to `/checkout/session` (all modes) and the deprecated `/checkout/intent` endpoint.
 
 ```jsonc
 {
@@ -3958,7 +4164,7 @@ Catalog Kit handles the checkout funnel (intent creation, 3DS, overrides) but do
    - Checkout Session: `checkout.session.completed`
    - Failures: `payment_intent.payment_failed`, `invoice.payment_failed`
 3. Your server uses the same Stripe secret key you provided to Catalog Kit
-4. Every intent includes metadata (`catalog_id`, `catalog_slug`, `user_id`, `tracer_id`, `line_items_json`, `trial_days`) for correlation
+4. Every intent includes metadata (`catalog_id`, `catalog_slug`, `user_id`, `tracer_id`, `line_items_json`, `trial_days`) for correlation, plus any custom `metadata` keys defined in the checkout config (with `{{field_id}}` templates resolved from form state)
 
 ### Recipe: Simple One-Time Payment
 
@@ -4041,7 +4247,7 @@ The most conversion-protective free trial pattern. Instead of a $0 subscription 
 
 Note: Use `amount_cents` on line items (not `stripe_price_id`) since the intent needs a concrete amount for the hold.
 
-**What happens under the hood:** The `/checkout/intent` endpoint sees `free_trial.enabled` + `capture_method: "manual"` and creates a PaymentIntent with `capture_method: "manual"` + `setup_future_usage: "off_session"`. The visitor enters their card inline, completes 3DS verification, and the hold is placed — all without leaving your page.
+**What happens under the hood:** With the Payment Element (default), the Checkout Session handles trial + hold configuration automatically. With the deprecated `/checkout/intent` endpoint, it sees `free_trial.enabled` + `capture_method: "manual"` and creates a PaymentIntent with `capture_method: "manual"` + `setup_future_usage: "off_session"`. The visitor enters their card, completes 3DS verification, and the hold is placed — all without leaving your page.
 
 **Step 2 — Your billing server handles the lifecycle:**
 
