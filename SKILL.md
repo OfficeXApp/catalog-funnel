@@ -37,8 +37,9 @@ Build and manage marketing catalogs, landing pages, and multi-step funnels — d
 - **Scaffold catalogs** — `catalogs catalog init` creates a new catalog from a template (quiz-funnel, lead-capture, product-catalog, blank)
 - **Diff against remote** — `catalogs catalog diff my-catalog.ts` shows structural changes vs the deployed version
 - **Open in browser** — `catalogs catalog open my-slug` opens the published catalog URL in your default browser
-- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions and inline card fields locally. Keys never leave your machine
-- **Local dev events** — page views, field changes, and checkout events stream to your terminal and an SSE endpoint (`/__dev_events_stream`) that AI agents can subscribe to. Zero production pollution
+- **Local Stripe checkout** — add `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...` to your `.env` and the dev server creates real Stripe checkout sessions and inline card fields locally. Full parity with production: metadata templates, `client_reference_id`, `reuse_payment_method` (saved payment methods), coupon codes, all `stripe_overrides`. Keys never leave your machine
+- **Local dev events** — page views, field changes, and checkout events stream to your terminal and an SSE endpoint (`/__dev_events_stream`) that AI agents can subscribe to. Accepts `POST /events`, `POST /events/batch`, and `/e/batch` (same as production). Zero production pollution
+- **Local API parity** — dev server exposes `GET /public/catalogs/dev-user/:slug` (fetch catalog as JSON) and `POST /routing/variant` (deterministic variant routing with keyword matching) so agents can test the same API surface locally
 - **Custom JavaScript** — inject custom client-side logic via `html` components with `<script>` tags and the `window.CatalogKit` API bridge
 - **Custom HTML components** — render arbitrary HTML/CSS/JS inside catalogs using `type: "html"` components
 - **Custom React components** — register React components on `window.__catalogkit_components` for fully custom interactive UI
@@ -2399,16 +2400,24 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | `kit.__devForceGoToPage(pageId)` | Dev-only: navigate to a page, bypassing `auto_skip` for one cycle. Used by the dev toolbar's Pages graph. Not available in production |
 | **Component props** | |
 | `kit.setComponentProp(id, prop, value)` | Override any component prop at runtime (e.g. `hidden`, `label`, `options`). Works on ALL component types — display and input alike |
-| **Display cart** (visual UI: drawer, badges, order summary) | |
+| **Named carts** (`kit.cart(name?)` returns a `CartHandle`) | |
+| `kit.cart(name?)` | Returns a `CartHandle` for the given cart name (default: `"default"`). Named carts enable multi-checkout upsell funnels |
+| `handle.add(item)` | Add a `CartItem` to this cart (dedupes by `offer_id`). Needs at minimum `offer_id`, `page_id`, `title` |
+| `handle.remove(offerId)` | Remove an item by `offer_id` |
+| `handle.items()` | Get a frozen array of items in this cart |
+| `handle.updateItem(offerId, updates)` | Merge new display properties into an existing cart item by `offer_id`. Use to override `title`, `price_display`, `price_subtext`, `image`, `button` for CRO copywriting. The `offer_id` cannot be changed |
+| `handle.setPaymentItems(items)` | Override Stripe line items for this cart. Pass `null` to fall back to display items |
+| `handle.paymentItems()` | Get the Stripe override array, or `null` |
+| `handle.clear()` | Clear all items and payment overrides for this cart |
+| `handle.moveTo(targetName, offerId?)` | Move one item (by `offer_id`) or all items to another named cart |
+| `kit.getCartNames()` | List names of non-empty carts |
+| `kit.clearAllCarts()` | Clear all named carts and payment overrides |
+| **Stripe customer (multi-checkout reuse)** | |
+| `kit.getStripeCustomerId()` | Get the Stripe customer ID from a prior checkout step, or `null` |
+| `kit.setStripeCustomerId(id)` | Manually set a Stripe customer ID for the next checkout |
+| **Cart drawer (default cart)** | |
 | `kit.openCart()` | Open the cart drawer programmatically |
 | `kit.closeCart()` | Close the cart drawer |
-| `kit.getDisplayItems()` | Get a frozen array of items shown in the cart UI |
-| `kit.addDisplayItem(item)` | Programmatically add an arbitrary `CartItem` to the visual cart (no page-offer required, dedupes by `offer_id`). Item needs at minimum `offer_id`, `page_id`, `title` |
-| `kit.removeDisplayItem(offerId)` | Remove an item from the visual cart by `offer_id` |
-| **Payment items** (what actually gets sent to Stripe) | |
-| `kit.setPaymentItems(items)` | Override line items sent to Stripe at checkout. Pass `null` to clear and fall back to display items. Lets you show a bundled deal in the UI while sending itemized charges to Stripe |
-| `kit.getPaymentItems()` | Get the current Stripe override array, or `null` if using display items |
-| `kit.clearCart()` | Clear all display items and payment items, fires `cart_clear` event. Useful between checkout steps in upsell chains |
 | `kit.startCheckout(cartName?)` | Programmatically trigger the built-in checkout page for the given cart (defaults to `"default"`). Fires `before_checkout`, then shows checkout. Use this instead of DOM-clicking the cart checkout button |
 | **Client reference ID** (passed to Stripe as `client_reference_id`) | |
 | `kit.setClientReferenceId(id)` | Set a custom `client_reference_id` for the Stripe checkout session. Pass `null` to clear. Best used inside a `before_checkout` listener so custom logic runs right before the session is created |
@@ -2721,7 +2730,7 @@ When checkboxes have nested inputs (e.g. proof URLs, wallet addresses), you **mu
 | `fieldchange:inputId` listener never fires for nested input | Same cause — bare input ID doesn't match the compound key in form state | Use `kit.on("fieldchange:checkboxId.optionValue.inputId", ...)` |
 | `setValidationError` doesn't display anything | Wrong `componentId` passed — must match the `id` of an input component on the current page | Check the component `id` in your schema matches the first argument |
 | Script doesn't execute | `html` component not on the current page, or `content` prop missing `<script>` tags | Ensure the `html` component is in the page's `components` array and the content is wrapped in `<script>...</script>` |
-| Checkout crashes or behaves differently in prod vs dev | Using DOM manipulation (`document.querySelector`) to click the cart checkout button after `preventDefault()` + `setTimeout` | Set `success_page_id` in `settings.checkout`, use the cart checkout button, or call `kit.startCheckout()`. See [Triggering Checkout](#triggering-checkout) |
+| Checkout crashes or behaves differently in prod vs dev | Using DOM manipulation (`document.querySelector`) to click the cart checkout button after `preventDefault()` + `setTimeout` | Use `success_page_id` to gate checkout automatically, or call `kit.startCheckout()`. See [Triggering Checkout](#triggering-checkout) |
 | `Unexpected token '<', "<!DOCTYPE"... is not valid JSON` on checkout | Outdated CLI — the dev server fetch interceptor is missing checkout routes | Run `npm install -g @officexapp/catalogs-cli@latest` to update. Ensure both `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are in your `.env` file in the catalog directory |
 | Stripe checkout shows "not configured" error | Missing Stripe keys in `.env` | Create a `.env` file in your catalog project directory with `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...`. The dev server checks the catalog directory, not your home directory |
 | "Stripe key mode mismatch" error on checkout | `stripe_publishable_key` in checkout settings is `pk_test_*` but the server's secret key is `sk_live_*` (or vice versa) | **For production:** set `stripe_publishable_key` to your live publishable key (`pk_live_*`). **For development:** use test keys in `.env` (`sk_test_*` + `pk_test_*`). Both keys must be from the same Stripe account and same mode (test or live). The CLI warns on `catalog push` if a test key is detected |
@@ -2934,9 +2943,13 @@ The local dev server exposes these endpoints at `http://localhost:3456` (or cust
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/checkout/session` | POST | Create a Stripe Checkout session (requires `STRIPE_SECRET_KEY` in `.env`). Same as production API |
+| `/checkout/session` | POST | Create a Stripe Checkout session (requires `STRIPE_SECRET_KEY` in `.env`). Full parity with production API |
 | `/checkout/session/status` | GET | Get session status after redirect. Query: `?session_id=cs_...` |
 | `/checkout/intent` | POST | [DEPRECATED] Create a PaymentIntent or SetupIntent (requires `STRIPE_SECRET_KEY` in `.env`). Use `/checkout/session` with `ui_mode: "custom"` instead |
+| `/events` or `/e` | POST | Track a single event (JSON body). Logged to terminal and broadcast via SSE |
+| `/events/batch` or `/e/batch` | POST | Track up to 25 events in a batch (JSON body: `{ "events": [...] }`). Same endpoint the production frontend uses |
+| `/public/catalogs/:userId/:slug` | GET | Fetch the loaded catalog as JSON — same response shape as production. Use `dev-user` as `:userId`. Optional `/:variantSlug` suffix for variant resolution |
+| `/routing/variant` | GET/POST | Deterministic variant routing. GET: `?slug=X&hint=Z`. POST: `{ "slug": "X", "hint": "Z" }`. Uses keyword matching instead of AI (Gemini) — returns `variant_slug`, `target_slug`, `reason` |
 | `/__dev_sse` | GET | SSE stream for auto-reload — sends `data: reload\n\n` when catalog file changes |
 | `/__dev_events_stream` | GET | SSE stream for dev events — broadcasts page views, field changes, checkout events as JSON |
 | `/__dev_events` | GET | Recent dev events as JSON array. Query param: `?limit=50` (default 50) |
@@ -2944,7 +2957,7 @@ The local dev server exposes these endpoints at `http://localhost:3456` (or cust
 | `/__dev_meta` | GET | Dev server metadata: slug, schema version, pages count, Stripe status, prod URL |
 | `/assets/*` | GET | Serves local files from the catalog directory (images, videos, scripts) |
 
-**Checkout endpoints** accept the same request body as the production API:
+**Checkout endpoints** accept the same request body as the production API, including all advanced features:
 
 ```json
 {
@@ -2954,9 +2967,58 @@ The local dev server exposes these endpoints at `http://localhost:3456` (or cust
   "line_items": [
     { "offer_id": "product-1", "title": "Product", "amount_cents": 2999, "payment_type": "one_time", "currency": "usd", "quantity": 1 }
   ],
-  "form_state": { "email": "user@example.com" }
+  "form_state": { "email": "user@example.com", "name": "Jane Doe" },
+  "coupon_code": "SAVE20",
+  "client_reference_id": "custom-ref-123"
 }
 ```
+
+Checkout features with full local parity:
+- `{{field_id}}` template resolution in metadata (e.g. `"company": "{{company_name}}"` resolves from `form_state`)
+- `client_reference_id` — from request body, schema template, or `tracer_id` fallback
+- `reuse_payment_method` — finds or creates a Stripe customer so saved payment methods appear on repeat checkouts
+- Coupon codes — applies specific `coupon_code` via Stripe discounts, or enables promo code entry when `allow_discount_codes` is set
+- Customer prefill (`customer_email`, `customer_name`) from `form_state` via `prefill_fields`
+- All `stripe_overrides` (capture_method, setup_future_usage, consent_collection, payment_method_options, statement descriptors, transfer_data)
+- Free trial with `trial_end_behavior`, 3D Secure, billing address collection, payment description, custom disclaimer text
+
+**Events endpoints** — agents can track and monitor events:
+
+```bash
+# Track a single event
+curl -X POST http://localhost:3456/events \
+  -H "Content-Type: application/json" \
+  -d '{"event_type":"page_view","page_id":"intro","catalog_slug":"my-catalog"}'
+
+# Track a batch (same as production frontend)
+curl -X POST http://localhost:3456/e/batch \
+  -H "Content-Type: application/json" \
+  -d '{"events":[{"event_type":"page_view","page_id":"intro"},{"event_type":"field_change","field_id":"email"}]}'
+```
+
+**Public catalog endpoint** — agents can fetch the loaded schema as JSON:
+
+```bash
+# Fetch catalog (same response shape as production)
+curl http://localhost:3456/public/catalogs/dev-user/my-catalog
+
+# Fetch with variant
+curl http://localhost:3456/public/catalogs/dev-user/my-catalog/enterprise-variant
+```
+
+**Routing variant endpoint** — test variant selection without AI:
+
+```bash
+# GET with query params
+curl "http://localhost:3456/routing/variant?slug=my-catalog&hint=enterprise%20SaaS"
+
+# POST with JSON body
+curl -X POST http://localhost:3456/routing/variant \
+  -H "Content-Type: application/json" \
+  -d '{"slug":"my-catalog","hint":"enterprise SaaS company"}'
+```
+
+The routing endpoint uses keyword matching against variant hints/descriptions instead of Gemini AI. Returns `{ "ok": true, "data": { "variant_slug": "...", "reason": "hint_keyword_match" } }`.
 
 **SSE streams** — connect with `EventSource` or `curl`:
 
@@ -2971,7 +3033,7 @@ curl -N http://localhost:3456/__dev_events_stream
 **Dev Preview Feature Parity:**
 - **Supported component types (inputs):** short_text, long_text, email, phone, url, number, password, dropdown, multiple_choice, checkboxes, picture_choice, slider, star_rating, switch/checkbox, opinion_scale, date, datetime, time, date_range, address, currency, file_upload (stubbed), signature (stubbed)
 - **Supported component types (display):** heading, paragraph, image, video, html, banner, callout, divider, pricing_card, testimonial, faq, accordion, timeline, file_download, iframe, table, social_links, tabs, countdown, comparison_table, progress_bar, modal
-- **Prod-only features** (not in dev preview): popup/overlay modals with embedded inputs, quiz scoring & reveal, full analytics pipeline, AI prefill, EVM/Solana/Bitcoin address inputs, custom components via `window.__catalogkit_components`
+- **Prod-only features** (not in dev preview): full analytics pipeline with DynamoDB persistence, AI prefill via Gemini, custom domain resolution, EVM/Solana/Bitcoin address inputs, custom components via `window.__catalogkit_components`, video transcoding/image compression uploads
 
 ### Local file references
 
@@ -3380,7 +3442,7 @@ Catalog Kit ships with a **complete, production-ready checkout page**. Do NOT bu
 
 1. **Set your Stripe keys** — add `stripe_publishable_key` in the schema and `stripe_secret_key` via the settings API
 2. **Configure `settings.checkout`** — set `payment_type`, `success_page_id`, and any appearance/payment options
-3. **Set `success_page_id`** — configure where visitors land after payment completes
+3. **Add page offers** — define an `offer` on at least one page so items get added to the cart (see "Page offers" below)
 
 ```jsonc
 {
@@ -3396,7 +3458,7 @@ Catalog Kit ships with a **complete, production-ready checkout page**. Do NOT bu
 }
 ```
 
-That's it. The visitor fills out your funnel, clicks the cart checkout button or a `kit.startCheckout()` call triggers checkout, sees the full checkout page with order summary and inline card fields, pays via Stripe, and lands on your thank-you page. No custom HTML, no Stripe SDK loading, no redirect handling, no webhook parsing on the frontend.
+That's it. When `success_page_id` is set, the platform automatically intercepts navigation to that page and shows the checkout UI first. The visitor fills out your funnel, accepts offers, and when they'd land on the success page — checkout appears with the full order summary and inline card fields. After paying via Stripe, they continue to your thank-you page. No custom HTML, no Stripe SDK loading, no redirect handling, no webhook parsing on the frontend.
 
 **When to use each checkout mode:**
 
@@ -3406,7 +3468,7 @@ That's it. The visitor fills out your funnel, clicks the cart checkout button or
 | **Minimal config, Stripe handles everything** | Embedded | Set `ui_mode: "embedded"` |
 | **No publishable key / simplest integration** | Hosted redirect | Omit `stripe_publishable_key` or set `ui_mode: "hosted"` |
 
-> **Bottom line:** Configure `settings.checkout` with `success_page_id`, set up page offers, and use the cart checkout button or `kit.startCheckout()` to trigger payment — the platform handles the entire payment flow. Only build custom checkout logic if you need behavior the built-in system genuinely cannot support.
+> **Bottom line:** Configure `settings.checkout` with a `success_page_id`, set up page offers, and the platform handles the entire payment flow — intercepting navigation to the success page with checkout automatically. Only build custom checkout logic if you need behavior the built-in system genuinely cannot support.
 
 ---
 
@@ -3417,49 +3479,112 @@ Catalog Kit has a **built-in cart and checkout system**. You do NOT need to buil
 1. **Page offers** — each page can define an `offer` object. When the visitor accepts the offer (via a form field), the item is automatically added to the cart.
 2. **Cart button** — a floating button appears in the bottom-right corner showing the cart item count. It only appears when items are in the cart.
 3. **Cart drawer** — clicking the cart button opens a right-side slide-out panel showing all accepted offers with images, titles, prices, and a remove button. A "Proceed to Checkout" button takes the visitor to the checkout page.
-4. **Checkout page** — displays an order summary of all cart items and redirects to Stripe Checkout to complete payment.
+4. **Checkout page** — displays an order summary of all cart items and collects payment via Stripe.
 
-### Display cart vs payment items
+### Named carts
 
-The cart system has **two independent layers**:
+Every cart has a name. The default cart is `"default"` — page offers add to it, the cart drawer shows it, and checkout charges it unless told otherwise.
 
-| Layer | What it controls | API methods |
-|-------|-----------------|-------------|
-| **Display cart** | What the visitor *sees* — the cart drawer, floating badge count, order summary UI | `addDisplayItem()`, `removeDisplayItem()`, `getDisplayItems()` |
-| **Payment items** | What Stripe actually *charges* — the line items sent to Stripe Checkout | `setPaymentItems()`, `getPaymentItems()` |
+Named carts let you run **multi-checkout upsell funnels** where each checkout step charges a different set of items.
 
-**By default, these are the same.** If you don't call `setPaymentItems()`, the display items are sent to Stripe as-is. This is the normal flow for page-offer-based carts.
+```javascript
+const kit = window.CatalogKit.get();
 
-**When you decouple them**, you can show one thing in the cart UI and charge something different via Stripe. Use cases:
+// Page offers auto-add to the default cart. You can also add programmatically:
+kit.cart().add({
+  offer_id: "plan-1", page_id: "pricing",
+  title: "Pro Plan", price_display: "$29/mo",
+  amount_cents: 2900, payment_type: "subscription", interval: "month",
+});
 
-- **Bundled pricing** — display "Premium Bundle — $99" in the cart, but send itemized line items to Stripe for accounting (Team License $75 + Onboarding $24)
-- **Dynamic discounts** — show original prices in the cart UI but send discounted amounts to Stripe
-- **AI agent cart building** — an AI agent programmatically builds a custom cart without needing page offers in the schema
-- **Upsell injection** — add a bonus item to payment items that isn't shown in the visual cart (e.g. a processing fee)
+// Create a separate cart for upsells
+kit.cart("upsell").add({
+  offer_id: "addon-1", page_id: "extras",
+  title: "Priority Support", price_display: "$9/mo",
+  amount_cents: 900, payment_type: "subscription", interval: "month",
+});
+
+// Read items
+kit.cart().items();           // → default cart items
+kit.cart("upsell").items();   // → upsell cart items
+
+// Move items between carts
+kit.cart().moveTo("upsell", "plan-1");   // move one item by offer_id
+kit.cart("upsell").moveTo("default");    // move all items back
+
+// Update display text on existing items (CRO copywriting)
+kit.cart().updateItem("plan-1", {
+  title: "Pro Plan — Best Value",
+  price_display: "$29/mo (save 40%)",
+  price_subtext: "billed annually",
+});
+
+// Remove / clear
+kit.cart().remove("plan-1");
+kit.cart("upsell").clear();
+kit.clearAllCarts();          // wipe everything
+kit.getCartNames();           // → ["default", "upsell"] (non-empty carts)
+```
+
+### Display items vs payment items
+
+Each named cart has **two layers**: display items (what the visitor sees) and payment items (what Stripe charges).
+
+By default they're the same. Call `setPaymentItems()` on a cart to decouple them:
 
 ```javascript
 const kit = window.CatalogKit.get();
 
 // Show a bundle in the cart UI
-kit.addDisplayItem({
+kit.cart().add({
   offer_id: "bundle-99", page_id: "custom",
   title: "Premium Bundle", price_display: "$99", amount_cents: 9900,
 });
 
 // But charge itemized line items via Stripe
-kit.setPaymentItems([
+kit.cart().setPaymentItems([
   { offer_id: "license", page_id: "custom", title: "Team License (5 seats)", amount_cents: 7500 },
   { offer_id: "onboarding", page_id: "custom", title: "Onboarding Fee", amount_cents: 2400 },
 ]);
 
 kit.startCheckout(); // Default cart: UI shows "Premium Bundle $99", Stripe charges two line items
+
+// Clear the override — Stripe goes back to charging display items
+kit.cart().setPaymentItems(null);
 ```
 
-To clear the override and go back to using display items for Stripe: `kit.setPaymentItems(null)`.
+This works per-cart: `kit.cart("upsell").setPaymentItems([...])` overrides only the upsell cart.
 
 ### Checkout as a page type
 
-Checkout can be a routable page in the routing graph using `type: "checkout"`. This enables multi-checkout upsell chains where each checkout step has its own Stripe payment.
+Checkout is a page in the routing graph — `type: "checkout"`. It's a first-class page, not a modal or overlay. It participates in routing, progress bars, back buttons, and BFS depth like any other page.
+
+**Simple single-checkout:**
+
+```jsonc
+{
+  "pages": {
+    "landing": { "title": "Pick your plan", "components": [/* ... */] },
+    "checkout": {
+      "type": "checkout",
+      "title": "Complete Your Order",
+      "components": []
+    },
+    "thank-you": { "title": "Thank you!", "components": [/* ... */] }
+  },
+  "routing": {
+    "entry": "landing",
+    "edges": {
+      "landing": { "next": "checkout" },
+      "checkout": { "next": "thank-you" }
+    }
+  }
+}
+```
+
+**Multi-checkout with named carts:**
+
+Each checkout page declares which cart it charges via `cart_name`:
 
 ```jsonc
 {
@@ -3468,13 +3593,15 @@ Checkout can be a routable page in the routing graph using `type: "checkout"`. T
     "checkout-main": {
       "type": "checkout",
       "title": "Complete Your Order",
+      "cart_name": "default",
       "components": []
     },
     "upsell": { "title": "Add premium support?", "components": [/* ... */] },
     "checkout-upsell": {
       "type": "checkout",
       "title": "Add-on Payment",
-      "checkout": { "title": "Premium Support" },  // overrides global checkout title
+      "cart_name": "upsell",
+      "checkout": { "title": "Premium Support" },
       "components": []
     },
     "thank-you": { "title": "Thank you!", "components": [/* ... */] }
@@ -3491,20 +3618,42 @@ Checkout can be a routable page in the routing graph using `type: "checkout"`. T
 }
 ```
 
-- **`type: "checkout"`** — renders the Stripe checkout UI instead of components. All existing pages without `type` are implicitly `"default"`.
-- **`page.checkout`** — optional `Partial<CheckoutSettings>` that overrides fields from `settings.checkout` for this specific checkout page. Useful for different titles, descriptions, or payment configs per checkout step.
+**`cart_name` resolution order:** `page.cart_name` → `page.checkout.cart_name` → `settings.checkout.cart_name` → `"default"`. Most catalogs never set it — the default cart just works.
+
+**Key behaviors:**
+
+- **`type: "checkout"`** — renders the Stripe checkout UI instead of components.
+- **`page.checkout`** — optional `Partial<CheckoutSettings>` that overrides fields from `settings.checkout` for this specific checkout page. Different titles, payment configs, or skip behavior per step.
+- **`cart_name`** — which named cart this checkout page charges. Omit for the default cart.
 - **`components: []`** — required field but ignored for checkout pages. Always set to empty array.
-- **Routing** — checkout pages are normal routing nodes. Progress bar, back button, and BFS depth all work correctly.
 - **Skip button** — "Continue without paying" follows routing edges to the next page (does not end the funnel).
 - **Back button** — normal history pop via browser back.
-- **Cart clearing** — cart is automatically cleared after successful Stripe payment. Use `kit.clearCart()` for manual clearing between upsell steps.
+- **Cart clearing** — all carts are automatically cleared after successful Stripe payment.
 - **Stripe return** — after payment, Stripe redirects back with `ck_page` URL param to identify which checkout page initiated the payment, then auto-advances to the next page in routing.
-- **Reuse saved card** — set `reuse_payment_method: true` in `settings.checkout` to find-or-create a Stripe Customer by email. The 2nd checkout automatically shows the card saved from the 1st checkout. Requires `prefill_fields.customer_email`.
 
-**`kit.clearCart()`** — clears all cart display items and payment items. Useful between checkout steps in an upsell chain:
+### Stripe Customer reuse across checkout steps
 
-```js
-window.CatalogKit.get().clearCart();
+When `reuse_payment_method: true` is set in `settings.checkout`, the first checkout creates (or finds) a Stripe Customer by email. The `customer_id` is automatically persisted in the session and passed to subsequent checkout steps — the second checkout shows the saved card from the first.
+
+```jsonc
+{
+  "settings": {
+    "checkout": {
+      "reuse_payment_method": true,
+      "prefill_fields": { "customer_email": "comp_email" }
+    }
+  }
+}
+```
+
+No script needed. The renderer handles `customer_id` plumbing between steps automatically.
+
+For script-driven flows, the customer ID is also available via `window.CatalogKit`:
+
+```javascript
+const kit = window.CatalogKit.get();
+kit.getStripeCustomerId();          // → "cus_xxx" after first checkout
+kit.setStripeCustomerId("cus_yyy"); // manually set (e.g. from your own API)
 ```
 
 ### Checkout settings
@@ -3519,6 +3668,7 @@ Configure checkout in `settings.checkout`:
       "title": "Complete Your Order",
       "subheading": "No commitment. Cancel anytime.", // Optional plain text below the title
       "stripe_publishable_key": "pk_live_...",
+      "cart_name": "default",                 // Which named cart auto-checkout charges. Omit for "default"
 
       // Payment options
       "allow_discount_codes": true,            // Show promo code field at Stripe checkout
@@ -3872,30 +4022,37 @@ kit.on('before_checkout', (e) => {
   window.location.href = 'https://my-custom-checkout.com?cart=' + e.cartName + '&items=' + e.items.length;
 });
 
-// ── Display cart (visual UI) ──
-kit.openCart();                          // Open the cart drawer
-kit.closeCart();                         // Close the cart drawer
-kit.getDisplayItems();                   // Frozen array of items in the cart UI
-kit.addDisplayItem({                     // Add arbitrary item (no page-offer needed)
-  offer_id: "bundle-123",
-  page_id: "custom",
-  title: "Premium Bundle",
-  price_display: "$99",
-  amount_cents: 9900,
-});
-kit.removeDisplayItem("bundle-123");     // Remove by offer_id
+// ── Named carts ──
+kit.cart().add({ offer_id: "plan-1", page_id: "pricing", title: "Pro Plan", amount_cents: 2900 });
+kit.cart().items();                      // Frozen array of default cart items
+kit.cart().remove("plan-1");             // Remove by offer_id
+kit.cart().updateItem("plan-1", { title: "New Title", price_display: "$19/mo" }); // Update display fields
+kit.cart("upsell").add({ ... });         // Add to a named cart
+kit.cart("upsell").items();              // Read named cart
+kit.cart().moveTo("upsell", "plan-1");   // Move item between carts
+kit.cart("upsell").clear();              // Clear one cart
+kit.clearAllCarts();                     // Clear all carts
+kit.getCartNames();                      // Non-empty cart names
 
-// ── Payment items (what Stripe charges) ──
-kit.setPaymentItems([                    // Override Stripe line items (null = use display items)
+// ── Payment item overrides (per cart) ──
+kit.cart().setPaymentItems([             // Override what Stripe charges (null = use display items)
   { offer_id: "license", page_id: "custom", title: "Team License", amount_cents: 7500 },
   { offer_id: "onboard", page_id: "custom", title: "Onboarding", amount_cents: 2400 },
 ]);
-kit.getPaymentItems();                   // Current override or null
+kit.cart().paymentItems();               // Current override or null
+
+// ── Cart drawer + checkout ──
+kit.openCart();                          // Open the cart drawer (shows default cart)
+kit.closeCart();                         // Close the cart drawer
 kit.startCheckout();                     // Show checkout for default cart (fires before_checkout first)
 kit.startCheckout("upsell");             // Show checkout for a specific named cart
 
+// ── Stripe Customer reuse ──
+kit.getStripeCustomerId();               // Customer ID from prior checkout step, or null
+kit.setStripeCustomerId("cus_xxx");      // Manually set (e.g. from your own API)
+
 // ── Client reference ID (custom Stripe tracking) ──
-kit.setClientReferenceId('my-ref-123'); // Set before checkout — overrides schema template
+kit.setClientReferenceId('my-ref-123');  // Set before checkout — overrides schema template
 kit.getClientReferenceId();              // Current value or null
 
 // Set dynamically with custom logic in before_checkout:
@@ -3910,24 +4067,31 @@ kit.on('before_checkout', (e) => {
 
 ## Triggering Checkout
 
-There are three ways visitors reach the built-in checkout page. Understanding these prevents common anti-patterns.
+There are three ways visitors reach the built-in checkout page. Checkout is **not tied to page topology** — pages can have any number of outgoing edges. This supports multi-checkout flows (e.g. upsells, add-ons, tiered offers) where visitors may pass through checkout more than once.
 
-### 1. `success_page_id` gate (recommended for funnels)
+### 1. `success_page_id` gate (recommended)
 
-When `settings.checkout` is configured with a `success_page_id`, checkout triggers via the cart checkout button or `kit.startCheckout()`. The platform shows the built-in checkout page with the full order summary, payment button, and everything from `settings.checkout`.
+When `settings.checkout.success_page_id` is set, the platform **automatically shows checkout** whenever navigation would land on that page. The visitor sees the full checkout UI, pays (or skips if `allow_skip` is true), and then continues to the success page. Just route to the success page normally — the checkout page intercepts the transition.
 
-```json
+```jsonc
 {
+  "routing": {
+    "entry": "landing",
+    "edges": [
+      { "from": "landing", "to": "offers" },
+      { "from": "offers", "to": "review" },
+      { "from": "review", "to": "next_steps" }   // ← checkout auto-shows before landing here
+    ]
+  },
   "settings": {
     "checkout": {
-      "payment_type": "one_time",
-      "success_page_id": "end_screen"
+      "success_page_id": "next_steps",  // ← the gate
+      "stripe_publishable_key": "pk_test_...",
+      "payment_type": "subscription"
     }
   }
 }
 ```
-
-After payment, `settings.checkout.success_page_id` routes the visitor to your thank-you/next-steps page (e.g. `"success_page_id": "end_screen"`). **Always set this field when using checkout** — without it, visitors land back on page 1 after paying.
 
 ### 2. Cart checkout button
 
@@ -3958,7 +4122,7 @@ This fires `before_checkout` (cancelable, payload includes `cartName`), then sho
 
 ### Common anti-pattern: DOM-clicking the cart checkout button
 
-**Do NOT** intercept `beforenext`, prevent navigation, open the cart, and `setTimeout` + `document.querySelector` to click the cart checkout button. This creates race conditions between React state updates and DOM manipulation, causing crashes in production. Use one of the three methods above instead.
+**Do NOT** intercept `beforenext`, prevent navigation, open the cart, and `setTimeout` + `document.querySelector` to click the cart checkout button. This creates race conditions between React state updates and DOM manipulation, causing crashes in production. Use one of the methods above instead.
 
 ```javascript
 // ❌ WRONG — fragile DOM hack, causes race conditions and crashes
@@ -3970,22 +4134,21 @@ kit.on('beforenext:review', (e) => {
   }, 300);
 });
 
-// ✅ CORRECT — set success_page_id in settings.checkout and use the cart checkout button
-
-// ✅ ALSO CORRECT — trigger checkout from a script
-kit.startCheckout();
+// ✅ CORRECT — use success_page_id so checkout auto-shows before the success page
+// Or call kit.startCheckout() programmatically
 ```
 
 ### Recipe: Review page before checkout
 
-A common pattern is showing a summary/review page before payment. Here is the recommended approach:
+A common pattern is showing a summary/review page before payment. Use `success_page_id` to gate the success page behind checkout:
 
 1. **Create a review page** with your summary content (headings, callouts, guarantees)
-2. **Add a routing edge from the review page to the next step** (or leave it as the last stop before checkout)
+2. **Route from review → success page** — the checkout page intercepts the transition automatically
 3. **Set the submit button label** to your CTA (e.g. `"submit_label": "Start Free Trial"`)
-4. **Configure `settings.checkout`** with your payment settings, `success_page_id`, components, testimonial, and disclaimer
+4. **Configure `settings.checkout`** with `success_page_id` pointing to your success page
 
 ```typescript
+// Review page — has an outgoing edge to end_screen
 pages["review"] = {
   title: "Start Your 7-Day Trial",
   components: [
@@ -3996,18 +4159,18 @@ pages["review"] = {
   submit_reassurance: "Cancel anytime. 90-day money-back guarantee.",
 };
 
-// Routing — review routes to end_screen after submit
+// Routing — review routes to end_screen; checkout intercepts via success_page_id
 edges: [
   { from: "last_offer", to: "review", conditions: { match: "all", rules: [{ field: "cart_flag", operator: "equals", value: "yes" }] } },
   { from: "last_offer", to: "end_screen", is_default: true },
   { from: "review", to: "end_screen" },
 ]
 
-// settings.checkout handles the payment flow
+// settings.checkout gates end_screen behind payment
 settings: {
   checkout: {
     payment_type: "subscription",
-    success_page_id: "end_screen",
+    success_page_id: "end_screen",  // ← checkout auto-shows before this page
     title: "Complete Your Order",
     button_text: "Start Free Trial",
     // ... 3DS, trial, components, testimonial, disclaimer
@@ -4015,7 +4178,7 @@ settings: {
 }
 ```
 
-When the visitor clicks the cart checkout button or `kit.startCheckout()` is called → platform shows the built-in checkout with order summary → Stripe payment → redirects to `end_screen`.
+When the visitor clicks "Start Free Trial" on the review page → platform auto-shows the built-in checkout with order summary → Stripe payment → redirects to `end_screen`.
 
 To redirect visitors who click the cart checkout button from other pages to the review page first, use `before_checkout`:
 
@@ -4027,7 +4190,7 @@ kit.on('before_checkout', (e) => {
     kit.closeCart();
     kit.goToPage('review');
   }
-  // On review page, let startCheckout or the cart checkout button handle it
+  // On review page, navigating to end_screen triggers checkout via success_page_id gate
 });
 ```
 
@@ -4089,7 +4252,7 @@ Events fired during the checkout flow (GA4-aligned naming for internal analytics
 
 | Event | When it fires | Key payload |
 |-------|--------------|-------------|
-| `checkout_start` | User enters checkout (cart checkout button or `kit.startCheckout()`) | `item_count`, `cart_name` |
+| `checkout_start` | User enters checkout (success_page_id gate, cart checkout button, or `kit.startCheckout()`) | `item_count`, `cart_name` |
 | `payment_info_added` | Payment form becomes interactive (Payment Element "ready" or embedded checkout mounted) | `payment_mode` ("custom" / "embedded"), `item_count`, `value.amount_cents` |
 | `checkout_complete` | Stripe redirects back after successful payment, OR $0 cart proceeds without Stripe | `payment_intent`, `session_id`, `redirect_status`, `page_id`. For $0 carts: `{ item_count: 0, amount_cents: 0, zero_cart: true }` |
 | `checkout_skip` | User clicks "Continue without paying" | `item_count` |
