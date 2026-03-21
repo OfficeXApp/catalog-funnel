@@ -2409,7 +2409,7 @@ window.CatalogKit.getField('email');           // .getField() does not exist on 
 | `kit.setPaymentItems(items)` | Override line items sent to Stripe at checkout. Pass `null` to clear and fall back to display items. Lets you show a bundled deal in the UI while sending itemized charges to Stripe |
 | `kit.getPaymentItems()` | Get the current Stripe override array, or `null` if using display items |
 | `kit.clearCart()` | Clear all display items and payment items, fires `cart_clear` event. Useful between checkout steps in upsell chains |
-| `kit.startCheckout()` | Programmatically trigger the built-in checkout page (fires `before_checkout`, then shows checkout). Use this instead of DOM-clicking the cart checkout button |
+| `kit.startCheckout(cartName?)` | Programmatically trigger the built-in checkout page for the given cart (defaults to `"default"`). Fires `before_checkout`, then shows checkout. Use this instead of DOM-clicking the cart checkout button |
 | **Client reference ID** (passed to Stripe as `client_reference_id`) | |
 | `kit.setClientReferenceId(id)` | Set a custom `client_reference_id` for the Stripe checkout session. Pass `null` to clear. Best used inside a `before_checkout` listener so custom logic runs right before the session is created |
 | `kit.getClientReferenceId()` | Get the current client reference ID, or `null` if not set |
@@ -2434,7 +2434,7 @@ Events follow the pattern `event` or `event:scope_id`. Unscoped listeners fire f
 | `cart_remove` | — | `{ offer_id, items }` | No | Offer removed from cart |
 | `cart_open` | — | `{ items }` | No | Cart drawer opened |
 | `cart_close` | — | `{ items }` | No | Cart drawer closed |
-| `before_checkout` | — | `{ items, preventDefault() }` | Yes | Before checkout — can block or redirect |
+| `before_checkout` | — | `{ items, cartName, preventDefault() }` | Yes | Before checkout — can block or redirect. `cartName` is the cart being checked out |
 
 **Scoping examples:**
 
@@ -2721,7 +2721,7 @@ When checkboxes have nested inputs (e.g. proof URLs, wallet addresses), you **mu
 | `fieldchange:inputId` listener never fires for nested input | Same cause — bare input ID doesn't match the compound key in form state | Use `kit.on("fieldchange:checkboxId.optionValue.inputId", ...)` |
 | `setValidationError` doesn't display anything | Wrong `componentId` passed — must match the `id` of an input component on the current page | Check the component `id` in your schema matches the first argument |
 | Script doesn't execute | `html` component not on the current page, or `content` prop missing `<script>` tags | Ensure the `html` component is in the page's `components` array and the content is wrapped in `<script>...</script>` |
-| Checkout crashes or behaves differently in prod vs dev | Using DOM manipulation (`document.querySelector`) to click the cart checkout button after `preventDefault()` + `setTimeout` | Use a terminal page (no outgoing routing edges) so checkout triggers automatically, or call `kit.startCheckout()`. See [Triggering Checkout](#triggering-checkout) |
+| Checkout crashes or behaves differently in prod vs dev | Using DOM manipulation (`document.querySelector`) to click the cart checkout button after `preventDefault()` + `setTimeout` | Set `success_page_id` in `settings.checkout`, use the cart checkout button, or call `kit.startCheckout()`. See [Triggering Checkout](#triggering-checkout) |
 | `Unexpected token '<', "<!DOCTYPE"... is not valid JSON` on checkout | Outdated CLI — the dev server fetch interceptor is missing checkout routes | Run `npm install -g @officexapp/catalogs-cli@latest` to update. Ensure both `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are in your `.env` file in the catalog directory |
 | Stripe checkout shows "not configured" error | Missing Stripe keys in `.env` | Create a `.env` file in your catalog project directory with `STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_PUBLISHABLE_KEY=pk_test_...`. The dev server checks the catalog directory, not your home directory |
 | "Stripe key mode mismatch" error on checkout | `stripe_publishable_key` in checkout settings is `pk_test_*` but the server's secret key is `sk_live_*` (or vice versa) | **For production:** set `stripe_publishable_key` to your live publishable key (`pk_live_*`). **For development:** use test keys in `.env` (`sk_test_*` + `pk_test_*`). Both keys must be from the same Stripe account and same mode (test or live). The CLI warns on `catalog push` if a test key is detected |
@@ -3380,7 +3380,7 @@ Catalog Kit ships with a **complete, production-ready checkout page**. Do NOT bu
 
 1. **Set your Stripe keys** — add `stripe_publishable_key` in the schema and `stripe_secret_key` via the settings API
 2. **Configure `settings.checkout`** — set `payment_type`, `success_page_id`, and any appearance/payment options
-3. **Make your last page terminal** — remove its outgoing routing edges so the platform auto-shows checkout on submit
+3. **Set `success_page_id`** — configure where visitors land after payment completes
 
 ```jsonc
 {
@@ -3396,7 +3396,7 @@ Catalog Kit ships with a **complete, production-ready checkout page**. Do NOT bu
 }
 ```
 
-That's it. The visitor fills out your funnel, hits the terminal page's submit button, sees the full checkout page with order summary and inline card fields, pays via Stripe, and lands on your thank-you page. No custom HTML, no Stripe SDK loading, no redirect handling, no webhook parsing on the frontend.
+That's it. The visitor fills out your funnel, clicks the cart checkout button or a `kit.startCheckout()` call triggers checkout, sees the full checkout page with order summary and inline card fields, pays via Stripe, and lands on your thank-you page. No custom HTML, no Stripe SDK loading, no redirect handling, no webhook parsing on the frontend.
 
 **When to use each checkout mode:**
 
@@ -3406,7 +3406,7 @@ That's it. The visitor fills out your funnel, hits the terminal page's submit bu
 | **Minimal config, Stripe handles everything** | Embedded | Set `ui_mode: "embedded"` |
 | **No publishable key / simplest integration** | Hosted redirect | Omit `stripe_publishable_key` or set `ui_mode: "hosted"` |
 
-> **Bottom line:** Configure `settings.checkout`, set up page offers, make the last page terminal, and the platform handles the entire payment flow. Only build custom checkout logic if you need behavior the built-in system genuinely cannot support.
+> **Bottom line:** Configure `settings.checkout` with `success_page_id`, set up page offers, and use the cart checkout button or `kit.startCheckout()` to trigger payment — the platform handles the entire payment flow. Only build custom checkout logic if you need behavior the built-in system genuinely cannot support.
 
 ---
 
@@ -3452,7 +3452,7 @@ kit.setPaymentItems([
   { offer_id: "onboarding", page_id: "custom", title: "Onboarding Fee", amount_cents: 2400 },
 ]);
 
-kit.startCheckout(); // Cart UI shows "Premium Bundle $99", Stripe charges two line items
+kit.startCheckout(); // Default cart: UI shows "Premium Bundle $99", Stripe charges two line items
 ```
 
 To clear the override and go back to using display items for Stripe: `kit.setPaymentItems(null)`.
@@ -3591,6 +3591,8 @@ You also need to set your Stripe secret key via the settings API (see "Update se
 ```json
 { "stripe_secret_key": "rk_live_..." }
 ```
+
+**Stripe isolation:** Each catalog gets its own Stripe instance scoped to its `stripe_publishable_key`. If a user views multiple catalogs with different Stripe accounts in the same browser session, each catalog's checkout uses the correct Stripe account — no keys or payment state bleed between catalogs.
 
 ### Page offers (cart items)
 
@@ -3854,7 +3856,7 @@ The following events are tracked automatically: `cart_add`, `cart_remove`, `chec
 | `cart_remove` | `{ offer_id, items }` | No | An offer was removed from the cart |
 | `cart_open` | `{ items }` | No | Cart drawer opened |
 | `cart_close` | `{ items }` | No | Cart drawer closed |
-| `before_checkout` | `{ items, preventDefault() }` | Yes | Fires before checkout — call `preventDefault()` to cancel and handle yourself |
+| `before_checkout` | `{ items, cartName, preventDefault() }` | Yes | Fires before checkout — call `preventDefault()` to cancel and handle yourself. `cartName` identifies which cart |
 
 ```javascript
 const kit = window.CatalogKit.get();
@@ -3867,7 +3869,7 @@ kit.on('cart_add', (e) => {
 // Intercept checkout — redirect to external payment
 kit.on('before_checkout', (e) => {
   e.preventDefault();
-  window.location.href = 'https://my-custom-checkout.com?items=' + e.items.length;
+  window.location.href = 'https://my-custom-checkout.com?cart=' + e.cartName + '&items=' + e.items.length;
 });
 
 // ── Display cart (visual UI) ──
@@ -3889,7 +3891,8 @@ kit.setPaymentItems([                    // Override Stripe line items (null = u
   { offer_id: "onboard", page_id: "custom", title: "Onboarding", amount_cents: 2400 },
 ]);
 kit.getPaymentItems();                   // Current override or null
-kit.startCheckout();                     // Show checkout page (fires before_checkout first)
+kit.startCheckout();                     // Show checkout for default cart (fires before_checkout first)
+kit.startCheckout("upsell");             // Show checkout for a specific named cart
 
 // ── Client reference ID (custom Stripe tracking) ──
 kit.setClientReferenceId('my-ref-123'); // Set before checkout — overrides schema template
@@ -3909,24 +3912,20 @@ kit.on('before_checkout', (e) => {
 
 There are three ways visitors reach the built-in checkout page. Understanding these prevents common anti-patterns.
 
-### 1. Terminal page (recommended for funnels)
+### 1. `success_page_id` gate (recommended for funnels)
 
-When the submit button is clicked on a **terminal page** (a page with no outgoing routing edges) and `settings.checkout` is configured, the built-in checkout page renders automatically. This is the simplest and most reliable approach.
+When `settings.checkout` is configured with a `success_page_id`, checkout triggers via the cart checkout button or `kit.startCheckout()`. The platform shows the built-in checkout page with the full order summary, payment button, and everything from `settings.checkout`.
 
 ```json
 {
-  "routing": {
-    "entry": "landing",
-    "edges": [
-      { "from": "landing", "to": "offers" },
-      { "from": "offers", "to": "review", "conditions": { "match": "all", "rules": [{ "field": "cart_flag", "operator": "equals", "value": "yes" }] } },
-      { "from": "offers", "to": "end_screen", "is_default": true }
-    ]
+  "settings": {
+    "checkout": {
+      "payment_type": "one_time",
+      "success_page_id": "end_screen"
+    }
   }
 }
 ```
-
-In this example, `review` has **no outgoing edges** — it is terminal. When the visitor clicks "Start Free Trial" on the review page, the platform fires the `submit` event and then shows the checkout page with the full order summary, payment button, and everything from `settings.checkout`.
 
 After payment, `settings.checkout.success_page_id` routes the visitor to your thank-you/next-steps page (e.g. `"success_page_id": "end_screen"`). **Always set this field when using checkout** — without it, visitors land back on page 1 after paying.
 
@@ -3934,9 +3933,9 @@ After payment, `settings.checkout.success_page_id` routes the visitor to your th
 
 Visitors can always click the floating cart button → open the cart drawer → click "Proceed to Checkout". This triggers the `before_checkout` event and then shows the checkout page. No configuration needed beyond `settings.checkout`.
 
-### 3. Programmatic via `kit.startCheckout()`
+### 3. Programmatic via `kit.startCheckout(cartName?)`
 
-For custom buttons or script-driven flows, call `kit.startCheckout()` to show the checkout page programmatically:
+For custom buttons or script-driven flows, call `kit.startCheckout()` to show the checkout page programmatically. Pass an optional cart name to check out a specific named cart (defaults to `"default"`):
 
 ```json
 {
@@ -3948,7 +3947,14 @@ For custom buttons or script-driven flows, call `kit.startCheckout()` to show th
 }
 ```
 
-This fires `before_checkout` (cancelable), then shows the built-in checkout page — identical to clicking the cart checkout button, but without requiring the cart drawer to be open.
+For named cart checkout:
+
+```javascript
+const kit = window.CatalogKit.get();
+kit.startCheckout("upsell"); // Checks out the "upsell" cart specifically
+```
+
+This fires `before_checkout` (cancelable, payload includes `cartName`), then shows the built-in checkout page — identical to clicking the cart checkout button, but without requiring the cart drawer to be open.
 
 ### Common anti-pattern: DOM-clicking the cart checkout button
 
@@ -3964,8 +3970,7 @@ kit.on('beforenext:review', (e) => {
   }, 300);
 });
 
-// ✅ CORRECT — make review a terminal page (no outgoing edges)
-// The platform auto-shows checkout when the submit button is clicked
+// ✅ CORRECT — set success_page_id in settings.checkout and use the cart checkout button
 
 // ✅ ALSO CORRECT — trigger checkout from a script
 kit.startCheckout();
@@ -3976,12 +3981,11 @@ kit.startCheckout();
 A common pattern is showing a summary/review page before payment. Here is the recommended approach:
 
 1. **Create a review page** with your summary content (headings, callouts, guarantees)
-2. **Do NOT add routing edges from the review page** — make it terminal
+2. **Add a routing edge from the review page to the next step** (or leave it as the last stop before checkout)
 3. **Set the submit button label** to your CTA (e.g. `"submit_label": "Start Free Trial"`)
-4. **Configure `settings.checkout`** with your payment settings, components, testimonial, and disclaimer
+4. **Configure `settings.checkout`** with your payment settings, `success_page_id`, components, testimonial, and disclaimer
 
 ```typescript
-// Review page — terminal (no outgoing edges)
 pages["review"] = {
   title: "Start Your 7-Day Trial",
   components: [
@@ -3992,14 +3996,14 @@ pages["review"] = {
   submit_reassurance: "Cancel anytime. 90-day money-back guarantee.",
 };
 
-// Routing — review is terminal, no edge FROM review
+// Routing — review routes to end_screen after submit
 edges: [
   { from: "last_offer", to: "review", conditions: { match: "all", rules: [{ field: "cart_flag", operator: "equals", value: "yes" }] } },
   { from: "last_offer", to: "end_screen", is_default: true },
-  // NO edge from "review" — this makes it terminal
+  { from: "review", to: "end_screen" },
 ]
 
-// settings.checkout handles the rest
+// settings.checkout handles the payment flow
 settings: {
   checkout: {
     payment_type: "subscription",
@@ -4011,7 +4015,7 @@ settings: {
 }
 ```
 
-When the visitor clicks "Start Free Trial" on the review page → platform auto-shows the built-in checkout with order summary → Stripe payment → redirects to `end_screen`.
+When the visitor clicks the cart checkout button or `kit.startCheckout()` is called → platform shows the built-in checkout with order summary → Stripe payment → redirects to `end_screen`.
 
 To redirect visitors who click the cart checkout button from other pages to the review page first, use `before_checkout`:
 
@@ -4023,7 +4027,7 @@ kit.on('before_checkout', (e) => {
     kit.closeCart();
     kit.goToPage('review');
   }
-  // On review page, let startCheckout/terminal-page flow handle it
+  // On review page, let startCheckout or the cart checkout button handle it
 });
 ```
 
@@ -4085,13 +4089,15 @@ Events fired during the checkout flow (GA4-aligned naming for internal analytics
 
 | Event | When it fires | Key payload |
 |-------|--------------|-------------|
-| `checkout_start` | User enters checkout (terminal page submit or cart checkout button) | `item_count` |
+| `checkout_start` | User enters checkout (cart checkout button or `kit.startCheckout()`) | `item_count`, `cart_name` |
 | `payment_info_added` | Payment form becomes interactive (Payment Element "ready" or embedded checkout mounted) | `payment_mode` ("custom" / "embedded"), `item_count`, `value.amount_cents` |
-| `checkout_complete` | Stripe redirects back after successful payment (detected on page load via URL params) | `payment_intent`, `session_id`, `redirect_status`, `page_id` |
+| `checkout_complete` | Stripe redirects back after successful payment, OR $0 cart proceeds without Stripe | `payment_intent`, `session_id`, `redirect_status`, `page_id`. For $0 carts: `{ item_count: 0, amount_cents: 0, zero_cart: true }` |
 | `checkout_skip` | User clicks "Continue without paying" | `item_count` |
 
 **Notes:**
 - `checkout_complete` increments the `checkout_completes` rollup counter used in dashboard analytics and revenue tracking
+- `checkout_complete` is deduplicated per session — refreshing the page after payment will not fire it again
+- `checkout_complete` also fires for $0 carts (empty cart at checkout time) with `zero_cart: true` so analytics pipelines can distinguish paid vs free completions
 - `payment_info_added` fires when the Stripe payment form is interactive, not when the user types card details (Stripe doesn't expose keystroke events)
 - For hosted mode checkout (redirect to stripe.com), `payment_info_added` does not fire since the payment form is on Stripe's domain
 - All events are internal framework analytics only — they do NOT push to GA4/GTM automatically. Use `kit.on('pageenter:success_page')` or webhook forwarding for external pixel/tag integrations
